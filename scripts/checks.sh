@@ -29,7 +29,10 @@ check_phpcs() {
   composer --working-dir="$TOOLS" init --quiet --name=magento-extension-check/tools
   composer --working-dir="$TOOLS" config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
   composer --working-dir="$TOOLS" require --no-progress --quiet magento/magento-coding-standard
-  composer --working-dir="$TOOLS" show magento/magento-coding-standard squizlabs/php_codesniffer | grep -E '^(name|versions)'
+  local package
+  for package in magento/magento-coding-standard squizlabs/php_codesniffer; do
+    composer --working-dir="$TOOLS" show "$package" | grep -E '^(name|versions)'
+  done
   local phpcs=("$TOOLS/vendor/bin/phpcs" --standard=Magento2 "--extensions=php,phtml" --ignore='*/vendor/*' -s)
   local totals
   totals="$("${phpcs[@]}" --severity=1 --report=json "$EXT" \
