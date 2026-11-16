@@ -26,6 +26,22 @@ inputs:
     description: 'PHPCS findings at or above this severity fail the check; lower ones are reported.'
     required: false
     default: '10'
+  phpcs-scope:
+    description: >-
+      `changed` checks only the PHP files touched by the pull request or push; `all` checks every
+      file. Falls back to every file when the changed files cannot be determined.
+    required: false
+    default: 'changed'
+  annotations:
+    description: >-
+      Show PHPCS and PHPStan findings inline on the changed lines of a pull request. Set to
+      `false` in all but one job when the same check runs in several matrix jobs.
+    required: false
+    default: 'true'
+  github-token:
+    description: 'Used only to read the list of files changed by the pull request or push.'
+    required: false
+    default: ${{ github.token }}
   phpstan-level:
     description: 'PHPStan rule level used when the extension ships no `phpstan.neon` or `phpstan.neon.dist`.'
     required: false
@@ -64,6 +80,18 @@ runs:
         restore-keys: |
           magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version || 'none' }}-
 
+    - name: List changed files
+      if: ${{ inputs.phpcs-scope == 'changed' || inputs.annotations == 'true' }}
+      shell: bash
+      env:
+        MEC_TOKEN: ${{ inputs.github-token }}
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+      run: |
+        mkdir -p "$MEC_WORK_DIR"
+        rm -f "$MEC_WORK_DIR/changed-files.txt"
+        php "$GITHUB_ACTION_PATH/scripts/changed-files.php" "$MEC_WORK_DIR/changed-files.txt" \
+          || echo "Changed files are not known; checks that depend on them cover every file."
+
     - name: Run checks
       id: run
       shell: bash
@@ -74,6 +102,8 @@ runs:
         MEC_PATH: ${{ inputs.path }}
         MEC_PHPCS_SEVERITY: ${{ inputs.phpcs-severity }}
         MEC_PHPSTAN_LEVEL: ${{ inputs.phpstan-level }}
+        MEC_PHPCS_SCOPE: ${{ inputs.phpcs-scope }}
+        MEC_ANNOTATIONS: ${{ inputs.annotations }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
       run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
 
