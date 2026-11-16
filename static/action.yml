@@ -1,0 +1,120 @@
+name: 'Magento Extension Static Checks'
+description: 'Checks a Magento 2 extension on one PHP version without installing Magento: Composer metadata, PHP syntax, coding standard'
+author: 'lbajsarowicz'
+
+inputs:
+  php-version:
+    description: 'PHP minor to run the checks on, such as `8.4`.'
+    required: true
+  checks:
+    description: 'Comma-separated list of checks to run. Available: `validate`, `lint`, `phpcs`.'
+    required: false
+    default: 'validate,lint,phpcs'
+  path:
+    description: 'Directory in the workspace that holds the extension (its `composer.json`).'
+    required: false
+    default: '.'
+  phpcs-config:
+    description: >-
+      Path in the workspace to a PHPCS ruleset. Empty uses `.phpcs.xml`, `phpcs.xml`,
+      `.phpcs.xml.dist` or `phpcs.xml.dist` from the extension, and without one the official
+      Magento 2 coding standard.
+    required: false
+    default: ''
+  phpcs-severity:
+    description: >-
+      Findings at or above this severity fail the check. Empty means 10 with the Magento 2
+      default, and "whatever the ruleset reports as an error" with a repository ruleset.
+    required: false
+    default: ''
+  phpcs-scope:
+    description: >-
+      `changed` checks only the PHP files touched by the pull request or push; `all` checks every
+      file. Falls back to every file when the changed files cannot be determined.
+    required: false
+    default: 'changed'
+  annotations:
+    description: >-
+      Show PHPCS findings inline on the changed lines of a pull request. Set to `false` in all
+      but one job when the checks run on several PHP versions.
+    required: false
+    default: 'true'
+  github-token:
+    description: 'Used only to read the list of files changed by the pull request or push.'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  status:
+    description: '`passed` or `failed`.'
+    value: ${{ steps.run.outputs.status }}
+  result-path:
+    description: 'Directory holding `results.json` and the log of every check.'
+    value: ${{ steps.run.outputs.result-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Reject checks that need Magento
+      shell: bash
+      env:
+        MEC_CHECKS: ${{ inputs.checks }}
+      run: |
+        for check in ${MEC_CHECKS//,/ }; do
+          case "$check" in
+            validate|lint|phpcs) ;;
+            *) echo "::error title=Magento Extension Static Checks::'${check}' is not a static check. Available: validate, lint, phpcs."; exit 1 ;;
+          esac
+        done
+
+    - name: Set up PHP ${{ inputs.php-version }}
+      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      with:
+        php-version: ${{ inputs.php-version }}
+        extensions: ctype, curl, dom, iconv, intl, mbstring, simplexml, tokenizer, xmlwriter, zip
+        coverage: none
+        tools: composer:v2
+        ini-values: memory_limit=-1
+
+    - name: Locate Composer cache
+      id: composer-cache
+      shell: bash
+      run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Composer downloads
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: magento-extension-check-static-${{ runner.os }}-php${{ inputs.php-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
+        restore-keys: |
+          magento-extension-check-static-${{ runner.os }}-php${{ inputs.php-version }}-
+
+    - name: List changed files
+      if: ${{ inputs.phpcs-scope == 'changed' || inputs.annotations == 'true' }}
+      shell: bash
+      env:
+        MEC_TOKEN: ${{ inputs.github-token }}
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+      run: |
+        mkdir -p "$MEC_WORK_DIR"
+        rm -f "$MEC_WORK_DIR/changed-files.txt"
+        php "$GITHUB_ACTION_PATH/../scripts/changed-files.php" "$MEC_WORK_DIR/changed-files.txt" \
+          || echo "Changed files are not known; checks that depend on them cover every file."
+
+    - name: Run static checks
+      id: run
+      shell: bash
+      env:
+        MEC_PHP_VERSION: ${{ inputs.php-version }}
+        MEC_MAGENTO_VERSION: ''
+        MEC_CHECKS: ${{ inputs.checks }}
+        MEC_PATH: ${{ inputs.path }}
+        MEC_PHPCS_SEVERITY: ${{ inputs.phpcs-severity }}
+        MEC_PHPCS_SCOPE: ${{ inputs.phpcs-scope }}
+        MEC_PHPCS_CONFIG: ${{ inputs.phpcs-config }}
+        MEC_PHPSTAN_LEVEL: '1'
+        MEC_PHPSTAN_CONFIG: ''
+        MEC_PHPSTAN_BASELINE: ''
+        MEC_ANNOTATIONS: ${{ inputs.annotations }}
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+      run: bash "$GITHUB_ACTION_PATH/../scripts/run.sh"

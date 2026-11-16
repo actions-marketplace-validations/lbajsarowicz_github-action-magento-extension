@@ -18,7 +18,16 @@ Status: proof of concept.
 
 A check with nothing to run is reported as `skipped`. `compile`, `unit` and `phpstan` are `blocked` when `install` fails.
 
+## Two actions in this repository
+
+| Reference | Runs | Needs Magento |
+|---|---|---|
+| `lbajsarowicz/github-action-magento-extension/static` | `validate`, `lint`, `phpcs` on one PHP version | no |
+| `lbajsarowicz/github-action-magento-extension` | `install`, `compile`, `unit`, `phpstan` (and the static checks when asked) on one Magento release and PHP version | yes |
+
 ## Usage
+
+The matrix action supplies both lists: every distinct PHP version for the static checks, and every Magento and PHP combination for the rest.
 
 ```yaml
 name: Magento Check
@@ -28,28 +37,36 @@ on:
     branches: [main]
 permissions: {}
 jobs:
-  static:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: lbajsarowicz/github-action-magento-extension@v0
-        with:
-          php-version: '8.3'
-
   matrix:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      php: ${{ steps.matrix.outputs.php }}
     steps:
       - id: matrix
         uses: lbajsarowicz/github-action-magento-matrix@v0
+
+  static:
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJSON(needs.matrix.outputs.php) }}
+    name: Static checks / PHP ${{ matrix.php }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: lbajsarowicz/github-action-magento-extension/static@v0
+        with:
+          php-version: ${{ matrix.php }}
+          annotations: ${{ strategy.job-index == 0 }}
 
   magento:
     needs: matrix
@@ -70,9 +87,12 @@ jobs:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
           checks: install,compile,unit,phpstan
+          annotations: ${{ strategy.job-index == 0 }}
 ```
 
 ## Inputs
+
+The static action takes `php-version`, `checks`, `path`, `phpcs-config`, `phpcs-severity`, `phpcs-scope`, `annotations` and `github-token` with the same meaning.
 
 | Input | Default | Meaning |
 |---|---|---|
