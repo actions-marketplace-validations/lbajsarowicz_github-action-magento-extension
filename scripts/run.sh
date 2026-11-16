@@ -15,7 +15,7 @@ fail_config() {
 [[ "$MEC_PHP_VERSION" =~ ^[0-9]+\.[0-9]+$ ]] || fail_config "php-version must be a minor such as 8.4, got '${MEC_PHP_VERSION}'."
 [[ -z "$MEC_MAGENTO_VERSION" || "$MEC_MAGENTO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-p[0-9]+)?$ ]] \
   || fail_config "magento-version must be a release such as 2.4.8-p5, got '${MEC_MAGENTO_VERSION}'."
-[[ "$MEC_PHPCS_SEVERITY" =~ ^[0-9]+$ ]] || fail_config "phpcs-severity must be a whole number."
+[[ "$MEC_PHPCS_SEVERITY" =~ ^[0-9]*$ ]] || fail_config "phpcs-severity must be a whole number."
 [[ "$MEC_PHPSTAN_LEVEL" =~ ^([0-9]|10|max)$ ]] || fail_config "phpstan-level must be 0-10 or max."
 [[ "$MEC_PHPCS_SCOPE" =~ ^(changed|all)$ ]] || fail_config "phpcs-scope must be changed or all."
 [[ "$MEC_ANNOTATIONS" =~ ^(true|false)$ ]] || fail_config "annotations must be true or false."
@@ -90,7 +90,7 @@ for check in $ordered; do
     echo "::${token}::"
     echo "::endgroup::"
     if [[ "$MEC_ANNOTATIONS" == "true" && -f "$RESULTS/${check}.json" ]]; then
-      php "$SCRIPTS/annotate.php" "$check" "$RESULTS/${check}.json" "$RESULTS" "$EXT" "$MEC_PHPCS_SEVERITY"
+      php "$SCRIPTS/annotate.php" "$check" "$RESULTS/${check}.json" "$RESULTS" "$EXT" "$(cat "$RESULTS/phpcs.threshold" 2>/dev/null || echo 10)"
     fi
     case "$code" in
       0) status="passed" ;;

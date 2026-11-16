@@ -9,6 +9,7 @@ declare(strict_types=1);
  */
 
 [, $tool, $reportFile, $resultsDir, $extensionPath, $failSeverity] = array_pad($argv, 6, '10');
+$failSeverity = trim((string) $failSeverity);
 
 $workspace = rtrim((string) realpath((string) getenv('GITHUB_WORKSPACE')), '/');
 $changedFile = dirname($resultsDir) . '/changed-files.txt';
@@ -36,7 +37,9 @@ foreach ($report['files'] ?? [] as $path => $file) {
     foreach ($file['messages'] ?? [] as $message) {
         if ($tool === 'phpcs') {
             $findings[] = [
-                'level' => (int) ($message['severity'] ?? 0) >= (int) $failSeverity ? 'error' : 'warning',
+                'level' => ($failSeverity === 'errors'
+                    ? ($message['type'] ?? '') === 'ERROR'
+                    : (int) ($message['severity'] ?? 0) >= (int) $failSeverity) ? 'error' : 'warning',
                 'file' => $repoPath,
                 'line' => (int) ($message['line'] ?? 1),
                 'col' => (int) ($message['column'] ?? 0),
@@ -54,6 +57,11 @@ foreach ($report['files'] ?? [] as $path => $file) {
             ];
         }
     }
+}
+
+// PHPStan analyses the whole extension, but only findings in changed files belong in the diff.
+if ($tool === 'phpstan' && $changed !== null) {
+    $findings = array_values(array_filter($findings, static fn (array $f): bool => isset($changed[$f['file']])));
 }
 
 usort($findings, static function (array $a, array $b) use ($changed): int {

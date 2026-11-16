@@ -22,10 +22,30 @@ inputs:
     description: 'Directory in the workspace that holds the extension (its `composer.json`).'
     required: false
     default: '.'
-  phpcs-severity:
-    description: 'PHPCS findings at or above this severity fail the check; lower ones are reported.'
+  phpcs-config:
+    description: >-
+      Path in the workspace to a PHPCS ruleset. Empty uses `.phpcs.xml`, `phpcs.xml`,
+      `.phpcs.xml.dist` or `phpcs.xml.dist` from the extension, and without one the official
+      Magento 2 coding standard.
     required: false
-    default: '10'
+    default: ''
+  phpcs-severity:
+    description: >-
+      Findings at or above this severity fail the check. Empty means 10 with the Magento 2
+      default, and "whatever the ruleset reports as an error" with a repository ruleset.
+    required: false
+    default: ''
+  phpstan-config:
+    description: >-
+      Path in the workspace to a PHPStan configuration. Empty uses `phpstan.neon`,
+      `phpstan.neon.dist` or `phpstan.dist.neon` from the extension, and without one a default
+      with the Magento extension for PHPStan.
+    required: false
+    default: ''
+  phpstan-baseline:
+    description: 'Path in the workspace to a PHPStan baseline, loaded on top of the default configuration.'
+    required: false
+    default: ''
   phpcs-scope:
     description: >-
       `changed` checks only the PHP files touched by the pull request or push; `all` checks every
@@ -43,7 +63,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   phpstan-level:
-    description: 'PHPStan rule level used when the extension ships no `phpstan.neon` or `phpstan.neon.dist`.'
+    description: 'PHPStan rule level of the default configuration.'
     required: false
     default: '1'
 
@@ -103,6 +123,9 @@ runs:
         MEC_PHPCS_SEVERITY: ${{ inputs.phpcs-severity }}
         MEC_PHPSTAN_LEVEL: ${{ inputs.phpstan-level }}
         MEC_PHPCS_SCOPE: ${{ inputs.phpcs-scope }}
+        MEC_PHPCS_CONFIG: ${{ inputs.phpcs-config }}
+        MEC_PHPSTAN_CONFIG: ${{ inputs.phpstan-config }}
+        MEC_PHPSTAN_BASELINE: ${{ inputs.phpstan-baseline }}
         MEC_ANNOTATIONS: ${{ inputs.annotations }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
       run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
