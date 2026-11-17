@@ -1,0 +1,12 @@
+{
+  "name": "github-action-magento-extension",
+  "private": true,
+  "description": "Checks of a Magento 2 extension against one Magento release, as GitHub Actions",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js report/test/*.test.js"
+  }
+}

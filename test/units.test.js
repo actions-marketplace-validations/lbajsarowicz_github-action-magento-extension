@@ -1,0 +1,155 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { moduleNames, phpFiles, unregisteredModules, testDirectories } = require('../src/extension');
+const { toolPackages } = require('../src/tools');
+const { withExtension } = require('../src/project');
+const { junitTotals, phpcsTotals, phpstanTotals, firstVersion } = require('../src/reports');
+const { findingsFromReport, annotationLines } = require('../src/annotations');
+const { changedFiles } = require('../src/changed-files');
+const { recordCheck, overallStatus } = require('../src/results');
+const { unitConfiguration } = require('../src/checks/phpunit');
+const { defaultConfiguration } = require('../src/checks/phpstan');
+const { resolveToolConfig } = require('../src/checks/tool-config');
+const { workspace } = require('./helpers');
+
+test('modules, PHP files and test directories of an extension', () => {
+  const { extension } = workspace({
+    'view/frontend/templates/a.phtml': '<?php ?>',
+    'vendor/other/etc/module.xml': '<config><module name="Other_Thing"/></config>',
+    'vendor/other/Thing.php': '<?php',
+    'Test/Unit/_files/etc/module.xml': '<config><module name="Fixture_Module"/></config>',
+    'Test/Unit/DemoTest.php': '<?php',
+    'Test/Integration/DemoTest.php': '<?php',
+  });
+  assert.deepEqual(moduleNames(extension), ['Acme_Demo']);
+  assert.deepEqual(phpFiles(extension).map((file) => path.relative(extension, file)), [
+    'Model/Demo.php', 'Test/Integration/DemoTest.php', 'Test/Unit/DemoTest.php', 'registration.php', 'view/frontend/templates/a.phtml',
+  ]);
+  assert.deepEqual(testDirectories(extension, 'Unit'), [path.join(extension, 'Test/Unit')]);
+  assert.deepEqual(unregisteredModules(extension, ['Acme_Demo', 'Acme_Missing']), ['Acme_Missing']);
+});
+
+test('tool packages come from require-dev and must look like packages', () => {
+  const composer = {
+    'require-dev': {
+      'phpstan/phpstan': '^2.0',
+      'bitexpert/phpstan-magento': '~0.44',
+      'Slevomat/Coding-Standard': '^8.0',
+      'phpunit/phpunit': '^10',
+      'acme/phpstan-rules': '1.0; rm -rf /',
+    },
+  };
+  assert.deepEqual(toolPackages(composer, 'phpstan'), ['phpstan/phpstan:^2.0', 'bitexpert/phpstan-magento:~0.44']);
+  assert.deepEqual(toolPackages(composer, 'phpcs'), ['slevomat/coding-standard:^8.0']);
+  assert.deepEqual(toolPackages({}, 'phpcs'), []);
+});
+
+test('the checkout is the only source of the extension in the project', () => {
+  const project = withExtension({ require: { 'magento/product-community-edition': '2.4.9' }, repositories: { old: {} } },
+    '/work/ext', 'acme/module-demo', 'https://mirror.example/');
+  assert.deepEqual(project.repositories, [
+    { type: 'path', url: '/work/ext', options: { symlink: false } },
+    { type: 'composer', url: 'https://mirror.example/', exclude: ['acme/module-demo'] },
+  ]);
+  assert.equal(project.require['acme/module-demo'], '*@dev');
+  assert.equal(project.require['magento/product-community-edition'], '2.4.9');
+});
+
+test('report parsers', () => {
+  assert.deepEqual(junitTotals('<testsuites><testsuite name="" tests="41" assertions="90" errors="1" failures="2"><testsuite tests="3"/>'),
+    { tests: 41, assertions: 90, broken: 3 });
+  assert.deepEqual(junitTotals(''), { tests: 0, assertions: 0, broken: 0 });
+
+  const phpcs = { files: { a: { messages: [{ type: 'ERROR', severity: 10 }, { type: 'ERROR', severity: 8 }, { type: 'WARNING', severity: 6 }] } } };
+  assert.deepEqual(phpcsTotals(phpcs, '10'), { failing: 1, other: 2 });
+  assert.deepEqual(phpcsTotals(phpcs, 'errors'), { failing: 2, other: 1 });
+  assert.equal(phpcsTotals({ unexpected: true }, '10'), null);
+
+  const phpstan = { totals: { errors: 1, file_errors: 2 }, errors: ['Ignored error pattern'], files: { 'a.php': { messages: [{ line: 4, message: 'Bad' }, { message: 'Worse' }] } } };
+  assert.deepEqual(phpstanTotals(phpstan), { count: 3, lines: ['Ignored error pattern', 'a.php:4  Bad', 'a.php:?  Worse'] });
+  assert.equal(phpstanTotals(null), null);
+  assert.equal(firstVersion('PHP_CodeSniffer version 3.13.6 (stable)'), '3.13.6');
+});
+
+test('annotations prefer changed files, respect the budget and limit PHPStan to changed files', () => {
+  const { extension } = workspace({ 'Model/Other.php': '<?php' });
+  const report = {
+    files: {
+      [path.join(extension, 'Model/Other.php')]: { messages: [{ type: 'ERROR', severity: 10, line: 1, message: 'other, file: 100%' }] },
+      [path.join(extension, 'Model/Demo.php')]: { messages: [{ type: 'WARNING', severity: 6, line: 9, source: 'A.B', message: 'warn' }, { type: 'ERROR', severity: 10, line: 2, message: 'err' }] },
+      '/elsewhere/x.php': { messages: [{ type: 'ERROR', severity: 10, line: 1, message: 'outside' }] },
+    },
+  };
+  const options = { workspace: extension, extension, threshold: '10' };
+  const findings = findingsFromReport('phpcs', report, options);
+  assert.equal(findings.length, 3);
+
+  const changed = new Set(['Model/Demo.php']);
+  const all = annotationLines('phpcs', findings, changed, { error: 10, warning: 10 });
+  assert.match(all.lines[0], /^::error file=Model\/Demo\.php,line=2,/);
+  assert.match(all.lines[1], /^::warning file=Model\/Demo\.php,line=9,title=PHPCS A\.B::warn$/);
+  assert.match(all.lines[2], /::other, file: 100%25$/);
+  assert.deepEqual(all.budget, { error: 8, warning: 9 });
+
+  const limited = annotationLines('phpcs', findings, changed, { error: 1, warning: 0 });
+  assert.equal(limited.lines.length, 2);
+  assert.match(limited.lines[1], /Showing 1 of 3 phpcs findings inline/);
+
+  const phpstan = annotationLines('phpstan', findingsFromReport('phpstan', report, options), changed, { error: 10, warning: 10 });
+  assert.equal(phpstan.lines.length, 2);
+  assert.ok(phpstan.lines.every((line) => line.includes('Model/Demo.php')));
+});
+
+test('changed files of a pull request and of a push', async () => {
+  const calls = [];
+  const request = (pages) => async (url, options) => {
+    calls.push([url, options.headers.Authorization]);
+    return { ok: true, json: async () => pages.shift() };
+  };
+  const base = { repository: 'acme/demo', api: 'https://api.example', token: 't' };
+
+  const page = Array.from({ length: 100 }, (_, index) => ({ filename: `f${index}.php`, status: 'modified' }));
+  const pull = await changedFiles({ ...base, event: { pull_request: { number: 7 } },
+    request: request([page, [{ filename: 'gone.php', status: 'removed' }, { filename: 'new.php', status: 'added' }]]) });
+  assert.equal(pull.length, 101);
+  assert.ok(pull.includes('new.php') && !pull.includes('gone.php'));
+  assert.deepEqual(calls[1], ['https://api.example/repos/acme/demo/pulls/7/files?per_page=100&page=2', 'Bearer t']);
+
+  const push = await changedFiles({ ...base, event: { before: 'a'.repeat(40), after: 'b'.repeat(40) }, request: request([{ files: [{ filename: 'x.php' }] }]) });
+  assert.deepEqual(push, ['x.php']);
+
+  assert.equal(await changedFiles({ ...base, event: { before: '0'.repeat(40), after: 'b'.repeat(40) }, request: request([]) }), null);
+  assert.equal(await changedFiles({ ...base, event: { pull_request: { number: 7 } }, request: async () => ({ ok: false }) }), null);
+  assert.equal(await changedFiles({ ...base, repository: 'not a repo', event: {}, request: request([]) }), null);
+});
+
+test('results keep one row per check and fail on failed or blocked', () => {
+  let checks = recordCheck([], { check: 'unit', status: 'failed', seconds: 1, note: 'a' });
+  checks = recordCheck(checks, { check: 'unit', status: 'passed', seconds: 2, note: 'b' });
+  assert.deepEqual(checks, [{ check: 'unit', status: 'passed', seconds: 2, note: 'b' }]);
+  assert.equal(overallStatus(checks), 'passed');
+  assert.equal(overallStatus([{ status: 'skipped' }, { status: 'blocked' }]), 'failed');
+});
+
+test('generated PHPUnit and PHPStan configurations', () => {
+  assert.match(unitConfiguration(['/m/vendor/acme/a & b/Test/Unit']), /<directory>\/m\/vendor\/acme\/a &amp; b\/Test\/Unit<\/directory>/);
+  const neon = defaultConfiguration({ extensionNeon: '/t/extension.neon', baseline: '/w/baseline.neon', level: '5', work: '/work', extension: '/w' });
+  assert.match(neon, /includes:\n {4}- \/t\/extension\.neon\n {4}- \/w\/baseline\.neon\nparameters:\n {4}level: 5\n/);
+  assert.doesNotMatch(defaultConfiguration({ extensionNeon: '/t/e.neon', baseline: null, level: '1', work: '/work', extension: '/w' }), /baseline/);
+});
+
+test('tool configuration: input, then repository file, then default', () => {
+  const { extension } = workspace({ 'phpcs.xml.dist': '<ruleset/>', 'dev/custom.xml': '<ruleset/>' });
+  const ctx = { config: { workspace: extension, extension }, changed: new Set(['phpcs.xml.dist']) };
+  const candidates = ['.phpcs.xml', 'phpcs.xml', '.phpcs.xml.dist', 'phpcs.xml.dist'];
+  assert.deepEqual(resolveToolConfig(ctx, 'dev/custom.xml', candidates), { file: path.join(extension, 'dev/custom.xml'), label: 'configured dev/custom.xml' });
+  assert.deepEqual(resolveToolConfig(ctx, '', candidates), { file: path.join(extension, 'phpcs.xml.dist'), label: 'repository phpcs.xml.dist, changed in this pull request' });
+  assert.throws(() => resolveToolConfig(ctx, 'missing.xml', candidates), /does not exist in the workspace/);
+  assert.throws(() => resolveToolConfig(ctx, '../outside.xml', candidates), /does not exist in the workspace/);
+  fs.rmSync(path.join(extension, 'phpcs.xml.dist'));
+  assert.deepEqual(resolveToolConfig(ctx, '', candidates), { file: null, label: 'action default' });
+});

@@ -110,11 +110,7 @@ runs:
       env:
         MEC_TOKEN: ${{ inputs.github-token }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
-      run: |
-        mkdir -p "$MEC_WORK_DIR"
-        rm -f "$MEC_WORK_DIR/changed-files.txt"
-        php "$GITHUB_ACTION_PATH/scripts/changed-files.php" "$MEC_WORK_DIR/changed-files.txt" \
-          || echo "Changed files are not known; checks that depend on them cover every file."
+      run: node "$GITHUB_ACTION_PATH/src/cli.js" changed-files
 
     - name: Run checks
       id: run
@@ -133,7 +129,7 @@ runs:
         MEC_ANNOTATIONS: ${{ inputs.annotations }}
         MEC_PHPUNIT_TESTDOX: ${{ inputs.phpunit-testdox }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
-      run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
+      run: node "$GITHUB_ACTION_PATH/src/cli.js" run
 
 branding:
   icon: 'check-square'

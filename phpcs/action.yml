@@ -60,7 +60,7 @@ runs:
         MEC_PHP_VERSION: ${{ inputs.php-version }}
         MEC_PROFILE: magento
         MEC_CACHE_ID: magento${{ inputs.magento-version }}
-      run: bash "$GITHUB_ACTION_PATH/../scripts/prepare.sh"
+      run: node "$GITHUB_ACTION_PATH/../src/cli.js" prepare
 
     - name: Set up PHP ${{ inputs.php-version }}
       if: ${{ steps.prepared.outputs.php != 'true' }}
@@ -92,11 +92,7 @@ runs:
       env:
         MEC_TOKEN: ${{ inputs.github-token }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
-      run: |
-        mkdir -p "$MEC_WORK_DIR"
-        rm -f "$MEC_WORK_DIR/changed-files.txt"
-        php "$GITHUB_ACTION_PATH/../scripts/changed-files.php" "$MEC_WORK_DIR/changed-files.txt" \
-          || echo "Changed files are not known; checks that depend on them cover every file."
+      run: node "$GITHUB_ACTION_PATH/../src/cli.js" changed-files
 
     - name: Run PHPCS
       id: run
@@ -114,4 +110,4 @@ runs:
         MEC_PHPSTAN_BASELINE: ''
         MEC_ANNOTATIONS: ${{ inputs.annotations }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
-      run: bash "$GITHUB_ACTION_PATH/../scripts/run.sh"
+      run: node "$GITHUB_ACTION_PATH/../src/cli.js" run

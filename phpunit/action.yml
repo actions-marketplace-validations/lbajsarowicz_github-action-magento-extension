@@ -76,7 +76,7 @@ runs:
         MEC_PHP_VERSION: ${{ inputs.php-version }}
         MEC_PROFILE: magento
         MEC_CACHE_ID: magento${{ inputs.magento-version }}
-      run: bash "$GITHUB_ACTION_PATH/../scripts/prepare.sh"
+      run: node "$GITHUB_ACTION_PATH/../src/cli.js" prepare
 
     - name: Set up PHP ${{ inputs.php-version }}
       if: ${{ steps.prepared.outputs.php != 'true' }}
@@ -128,4 +128,4 @@ runs:
         MEC_SEARCH_ENGINE: ${{ inputs.search-engine }}
         MEC_SEARCH_HOST: ${{ inputs.search-host }}
         MEC_SEARCH_PORT: ${{ inputs.search-port }}
-      run: bash "$GITHUB_ACTION_PATH/../scripts/run.sh"
+      run: node "$GITHUB_ACTION_PATH/../src/cli.js" run

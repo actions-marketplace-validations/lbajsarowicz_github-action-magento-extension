@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint scripts
+    name: Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -22,14 +22,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: ShellCheck
-        run: shellcheck --external-sources --source-path=scripts scripts/*.sh
-      - name: PHP syntax
-        run: |
-          set -euo pipefail
-          for file in scripts/*.php; do php -l "$file"; done
+      - name: Unit tests on the Node that the runner provides
+        run: node --version && npm test
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Report tests
-        run: node --test report/test/*.test.js
+      - name: Unit tests on Node 24
+        run: npm test
+      - name: Syntax of the PHP helpers
+        run: |
+          set -euo pipefail
+          for file in src/php/*.php; do php -l "$file"; done

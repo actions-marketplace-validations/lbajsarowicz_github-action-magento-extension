@@ -392,6 +392,10 @@ annotations: ${{ strategy.job-index == 0 }}
 | `status` | `passed` or `failed` |
 | `result-path` | Directory with `results.json` and one log per check |
 
+## Requirements
+
+A Linux runner with Node.js 20 or newer on the `PATH`, `rsync` and `diff`. GitHub-hosted runners have all three. The actions set up PHP and Composer themselves. The code of the actions is plain Node.js without npm dependencies, covered by `npm test`.
+
 ## Permissions
 
 `contents: read` for the checkout. In a private repository add `pull-requests: read` so the action can list the changed files; without it PHPCS checks every file.
