@@ -112,23 +112,37 @@ function renderMarkdown(report, title) {
   if (troubled.length > 0) {
     lines.push('### What failed', '');
     for (const row of troubled) {
-      lines.push(`#### ${inline(row.label)}`, '');
+      lines.push('---', '', `#### ${ICONS.failed} ${inline(row.label)}`, '');
       const failures = row.outcomes.filter((outcome) => outcome.status === 'failed');
-      for (const outcome of failures) {
-        lines.push(`**${outcome.title}**${outcome.note ? `: ${inline(outcome.note)}` : ''}`, '');
-        const log = row.logs[outcome.check];
-        if (log) {
-          lines.push(`<details><summary>Last lines of the ${outcome.title} log</summary>`, '', '<pre>', escapeHtml(log), '</pre>', '', '</details>', '');
-        }
-      }
-      const held = row.outcomes.filter((outcome) => ['blocked', 'not-run'].includes(outcome.status)).map((outcome) => outcome.title);
-      if (failures.length > 0 && held.length > 0) {
-        lines.push(`Not run: ${held.join(', ')}.`, '');
-      }
       if (failures.length === 0) {
         lines.push('The job uploaded no result. See its log.', '');
+        continue;
+      }
+      const held = row.outcomes.filter((outcome) => ['blocked', 'not-run'].includes(outcome.status));
+      const passed = row.outcomes.filter((outcome) => outcome.status === 'passed');
+      const skipped = row.outcomes.filter((outcome) => outcome.status === 'skipped');
+      lines.push('| | Check | What happened |', '|:---:|---|---|');
+      for (const outcome of failures) {
+        lines.push(`| ${ICONS.failed} | **${outcome.title}** | ${inline(outcome.note) || 'See the log below.'} |`);
+      }
+      for (const outcome of held) {
+        lines.push(`| ${ICONS[outcome.status]} | ${outcome.title} | ${outcome.status === 'blocked' ? 'Blocked by the failed install.' : 'Not run.'} |`);
+      }
+      if (skipped.length > 0) {
+        lines.push(`| ${ICONS.skipped} | ${skipped.map((outcome) => outcome.title).join(', ')} | Nothing to run. |`);
+      }
+      if (passed.length > 0) {
+        lines.push(`| ${ICONS.passed} | ${passed.map((outcome) => outcome.title).join(', ')} | Passed. |`);
+      }
+      lines.push('');
+      for (const outcome of failures) {
+        const log = row.logs[outcome.check];
+        if (log) {
+          lines.push(`<details><summary>${outcome.title}: last lines of the log</summary>`, '', '<pre>', escapeHtml(log), '</pre>', '', '</details>', '');
+        }
       }
     }
+    lines.push('---', '');
   }
 
   const detailed = rows.filter((row) => row.outcomes.some((outcome) => !['missing', 'not-run'].includes(outcome.status)));
