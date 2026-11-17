@@ -345,8 +345,8 @@ The static action takes `php-version`, `checks`, `path`, `phpcs-config`, `phpcs-
 | `github-token` | `github.token` | Only reads the list of changed files |
 | `phpstan-level` | `1` | Level of the default PHPStan configuration |
 | `phpunit-testdox` | `false` | Print every test name as a readable sentence (PHPUnit `--testdox`); `testdox` in the `phpunit` action |
+| `composer-repositories` | empty | JSON list replacing the public Magento mirror as the source of dependencies; see Private Composer repositories |
 
-Private Composer repositories: set `COMPOSER_AUTH` in the step's `env`.
 
 ## Configuration
 
@@ -363,6 +363,42 @@ A path given by input that does not exist fails the check. The job summary names
 With the default ruleset `phpcs` fails at severity 10 and reports the rest as warnings. With a repository ruleset it fails on what that ruleset reports as errors. `phpcs-severity` overrides both.
 
 A repository PHPStan configuration brings its baseline through its own `includes:`. Without a configuration, `phpstan-baseline` loads a baseline on top of the default.
+
+## Private Composer repositories
+
+By default Magento and its dependencies come from the public mirror `mirror.mage-os.org` and from Packagist. `composer-repositories` replaces that with your own list, in the format of the `repositories` section of a `composer.json`. Credentials go in `COMPOSER_AUTH`.
+
+```yaml
+      - uses: lbajsarowicz/github-action-magento-extension/install@v0
+        with:
+          magento-version: ${{ matrix.magento }}
+          php-version: ${{ matrix.php }}
+          composer-repositories: |
+            [
+              {"type": "composer", "url": "https://repo.packagist.com/acme/"},
+              {"packagist.org": false}
+            ]
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
+```
+
+- The list is used for the Magento project and for the separate directory that PHPCS and PHPStan are installed into. Every action that runs Composer takes the input: `static`, `install`, `phpcs`, `phpstan`, `compile`, `phpunit` and the root action.
+- `magento/project-community-edition` is read from the first entry of type `composer`. If your repository does not carry the Magento packages, add `{"type": "composer", "url": "https://mirror.mage-os.org/"}` to the list.
+- The checkout stays first and is the only source of the extension. The action adds the extension to `exclude` of every repository in the list, or removes it from `only`, so a published release of the package cannot be installed in place of the pull request's code.
+- `{"packagist.org": false}` switches Packagist off, as in a `composer.json`.
+- An input that is not a JSON list of repositories fails before Composer runs.
+
+With several steps in one job, set the list once for the job and leave the input out. `COMPOSER_AUTH` can be set the same way.
+
+```yaml
+  check:
+    env:
+      MAGENTO_EXTENSION_CHECK_COMPOSER_REPOSITORIES: |
+        [{"type": "composer", "url": "https://repo.packagist.com/acme/"}, {"packagist.org": false}]
+      COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
+```
+
+The input of a step takes precedence over the variable of the job.
 
 ## Tool versions
 

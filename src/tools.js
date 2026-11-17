@@ -46,6 +46,11 @@ async function installTools(ctx, tool, defaults) {
     fs.rmSync(directory, { recursive: true, force: true });
     fs.mkdirSync(directory, { recursive: true });
     await composer(['init', '--quiet', `--name=magento-extension-check/${tool}-tools`]);
+    if (ctx.config.customRepositories) {
+      const file = path.join(directory, 'composer.json');
+      const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+      fs.writeFileSync(file, `${JSON.stringify({ ...manifest, repositories: ctx.config.repositories }, null, 4)}\n`);
+    }
     await composer(['config', 'allow-plugins.dealerdirect/phpcodesniffer-composer-installer', 'true']);
     await composer(['config', 'allow-plugins.phpstan/extension-installer', 'true']);
   };

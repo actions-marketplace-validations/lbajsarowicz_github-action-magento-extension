@@ -7,6 +7,34 @@ const { selectChecks } = require('./plan');
 
 const PACKAGE_NAME = /^[a-z0-9]([_.-]?[a-z0-9]+)*\/[a-z0-9]([_.-]?[a-z0-9]+)*$/;
 
+/**
+ * Parses the `composer-repositories` input: a JSON list in the format of Composer's own
+ * `repositories` section. Returns null when the input is empty.
+ */
+function parseRepositories(raw) {
+  if (raw.trim() === '') {
+    return null;
+  }
+  let list;
+  try {
+    list = JSON.parse(raw);
+  } catch (error) {
+    throw new ConfigError(`composer-repositories is not valid JSON: ${error.message}`);
+  }
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new ConfigError('composer-repositories must be a JSON list with at least one repository.');
+  }
+  for (const entry of list) {
+    const isObject = entry !== null && typeof entry === 'object' && !Array.isArray(entry);
+    const disables = isObject && Object.keys(entry).length > 0 && Object.values(entry).every((value) => value === false);
+    const describes = isObject && typeof entry.type === 'string' && (typeof entry.url === 'string' || entry.type === 'package');
+    if (!disables && !describes) {
+      throw new ConfigError('Every entry of composer-repositories must be a repository with "type" and "url", or a switch such as {"packagist.org": false}.');
+    }
+  }
+  return list;
+}
+
 function requireMatch(value, pattern, message) {
   if (!pattern.test(value)) {
     throw new ConfigError(message);
@@ -54,7 +82,9 @@ function readConfig(env) {
     extensionName,
     checks: selectChecks(value('MEC_CHECKS', 'default'), magentoVersion),
     work: path.resolve(value('MEC_WORK_DIR', path.join(workspace, '.magento-extension-check'))),
-    mirror: 'https://mirror.mage-os.org/',
+    repositories: parseRepositories(value('MEC_COMPOSER_REPOSITORIES', value('MAGENTO_EXTENSION_CHECK_COMPOSER_REPOSITORIES')))
+      || [{ type: 'composer', url: 'https://mirror.mage-os.org/' }],
+    customRepositories: value('MEC_COMPOSER_REPOSITORIES', value('MAGENTO_EXTENSION_CHECK_COMPOSER_REPOSITORIES')).trim() !== '',
     phpcs: {
       severity: requireMatch(value('MEC_PHPCS_SEVERITY'), /^[0-9]*$/, 'phpcs-severity must be a whole number.'),
       scope: requireMatch(value('MEC_PHPCS_SCOPE', 'changed'), /^(changed|all)$/, 'phpcs-scope must be changed or all.'),
@@ -95,4 +125,4 @@ function readConfig(env) {
   return config;
 }
 
-module.exports = { readConfig, PACKAGE_NAME };
+module.exports = { readConfig, parseRepositories, PACKAGE_NAME };

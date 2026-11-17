@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { CheckFailed } = require('../errors');
-const { withExtension } = require('../project');
+const { withExtension, templateRepositoryUrl } = require('../project');
 
 const HELPERS = path.join(__dirname, '..', 'php');
 
@@ -13,12 +13,13 @@ function magento(ctx, args, options = {}) {
 
 async function install(ctx) {
   const { config } = ctx;
-  const { magentoRoot: root, extension, extensionName, mirror } = config;
-  await ctx.sh.exec('composer', ['create-project', '--no-install', '--no-progress', `--repository-url=${mirror}`,
+  const { magentoRoot: root, extension, extensionName, repositories } = config;
+  const template = templateRepositoryUrl(repositories);
+  await ctx.sh.exec('composer', ['create-project', '--no-install', '--no-progress', ...(template ? [`--repository-url=${template}`] : []),
     `magento/project-community-edition=${config.magentoVersion}`, root]);
   fs.mkdirSync(path.join(root, 'app', 'etc'), { recursive: true });
   const composerFile = path.join(root, 'composer.json');
-  const project = withExtension(JSON.parse(fs.readFileSync(composerFile, 'utf8')), extension, extensionName, mirror);
+  const project = withExtension(JSON.parse(fs.readFileSync(composerFile, 'utf8')), extension, extensionName, repositories);
   fs.writeFileSync(composerFile, `${JSON.stringify(project, null, 4)}\n`);
 
   // Old release lines carry dependencies with published advisories; Composer would refuse to

@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { moduleNames, phpFiles, unregisteredModules, testDirectories } = require('../src/extension');
-const { toolPackages } = require('../src/tools');
-const { withExtension } = require('../src/project');
+const { toolPackages, installTools } = require('../src/tools');
+const { withExtension, templateRepositoryUrl } = require('../src/project');
 const { junitTotals, phpcsTotals, phpstanTotals, firstVersion } = require('../src/reports');
 const { findingsFromReport, annotationLines } = require('../src/annotations');
 const { changedFiles } = require('../src/changed-files');
@@ -48,15 +48,52 @@ test('tool packages come from require-dev and must look like packages', () => {
   assert.deepEqual(toolPackages({}, 'phpcs'), []);
 });
 
+test('the tools directory uses the custom repositories', async () => {
+  const { root, extension } = workspace();
+  const manifest = async (config) => {
+    const directory = path.join(root, 'tools', 'phpcs');
+    const sh = {
+      exec: async (command, args) => {
+        if (args.includes('init')) {
+          fs.writeFileSync(path.join(directory, 'composer.json'), '{"name": "x/y"}');
+        }
+        return { code: 0, stdout: '', output: '' };
+      },
+    };
+    await installTools({ config: { tools: path.join(root, 'tools'), extension, ...config }, sh, log: () => {} }, 'phpcs', ['magento/magento-coding-standard']);
+    return JSON.parse(fs.readFileSync(path.join(directory, 'composer.json'), 'utf8'));
+  };
+  const repositories = [{ type: 'composer', url: 'https://repo.example/acme/' }, { 'packagist.org': false }];
+  assert.deepEqual((await manifest({ customRepositories: true, repositories })).repositories, repositories);
+  assert.equal((await manifest({ customRepositories: false, repositories })).repositories, undefined);
+});
+
 test('the checkout is the only source of the extension in the project', () => {
   const project = withExtension({ require: { 'magento/product-community-edition': '2.4.9' }, repositories: { old: {} } },
-    '/work/ext', 'acme/module-demo', 'https://mirror.example/');
+    '/work/ext', 'acme/module-demo', [{ type: 'composer', url: 'https://mirror.example/' }]);
   assert.deepEqual(project.repositories, [
     { type: 'path', url: '/work/ext', options: { symlink: false } },
     { type: 'composer', url: 'https://mirror.example/', exclude: ['acme/module-demo'] },
   ]);
   assert.equal(project.require['acme/module-demo'], '*@dev');
   assert.equal(project.require['magento/product-community-edition'], '2.4.9');
+});
+
+test('custom repositories can never provide the extension', () => {
+  const repositories = [
+    { type: 'composer', url: 'https://repo.example/acme/', exclude: ['other/package'] },
+    { type: 'vcs', url: 'https://git.example/x.git', only: ['acme/module-demo', 'acme/library'] },
+    { 'packagist.org': false },
+  ];
+  const project = withExtension({}, '/work/ext', 'acme/module-demo', repositories);
+  assert.deepEqual(project.repositories, [
+    { type: 'path', url: '/work/ext', options: { symlink: false } },
+    { type: 'composer', url: 'https://repo.example/acme/', exclude: ['other/package', 'acme/module-demo'] },
+    { type: 'vcs', url: 'https://git.example/x.git', only: ['acme/library'] },
+    { 'packagist.org': false },
+  ]);
+  assert.equal(templateRepositoryUrl(repositories), 'https://repo.example/acme/');
+  assert.equal(templateRepositoryUrl([{ type: 'vcs', url: 'https://git.example/x.git' }]), null);
 });
 
 test('report parsers', () => {

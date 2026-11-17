@@ -21,6 +21,13 @@ inputs:
     description: 'Space-separated locales to deploy static content for.'
     required: false
     default: 'en_US'
+  composer-repositories:
+    description: >-
+      JSON list in the format of Composer's `repositories` section. It replaces the public
+      Magento mirror and, when it switches packagist.org off, Packagist as the source of every
+      dependency. The checkout stays the only source of the extension itself.
+    required: false
+    default: ''
 
 outputs:
   status:
@@ -76,6 +83,7 @@ runs:
         MEC_MAGENTO_VERSION: ${{ inputs.magento-version }}
         MEC_CHECKS: ${{ inputs.static-content == 'true' && 'install,compile,static-content' || 'install,compile' }}
         MEC_PATH: ${{ inputs.path }}
+        MEC_COMPOSER_REPOSITORIES: ${{ inputs.composer-repositories }}
         MEC_PHPCS_SEVERITY: ''
         MEC_PHPCS_SCOPE: changed
         MEC_PHPCS_CONFIG: ''

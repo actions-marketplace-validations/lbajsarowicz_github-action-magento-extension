@@ -50,6 +50,36 @@ test('refuses a package without a valid name or composer.json', () => {
   assert.throws(() => readConfig(workspace({ 'composer.json': null }).env), /No composer.json/);
 });
 
+test('the public Magento mirror is the default repository', () => {
+  const config = readConfig(workspace().env);
+  assert.deepEqual(config.repositories, [{ type: 'composer', url: 'https://mirror.mage-os.org/' }]);
+  assert.equal(config.customRepositories, false);
+});
+
+test('composer-repositories replaces the default, from the input or from the job environment', () => {
+  const { env } = workspace();
+  const list = [{ type: 'composer', url: 'https://repo.example/acme/' }, { 'packagist.org': false }];
+  const fromInput = readConfig({ ...env, MEC_COMPOSER_REPOSITORIES: JSON.stringify(list), MAGENTO_EXTENSION_CHECK_COMPOSER_REPOSITORIES: '[{"type":"composer","url":"https://other.example/"}]' });
+  assert.deepEqual(fromInput.repositories, list);
+  assert.equal(fromInput.customRepositories, true);
+  const fromJob = readConfig({ ...env, MAGENTO_EXTENSION_CHECK_COMPOSER_REPOSITORIES: JSON.stringify(list) });
+  assert.deepEqual(fromJob.repositories, list);
+});
+
+for (const [name, raw] of [
+  ['broken JSON', '[{'],
+  ['an object', '{"type":"composer","url":"https://repo.example/"}'],
+  ['an empty list', '[]'],
+  ['an entry without a URL', '[{"type":"composer"}]'],
+  ['a string entry', '["https://repo.example/"]'],
+  ['an enabling switch', '[{"packagist.org": true}]'],
+]) {
+  test(`refuses composer-repositories with ${name}`, () => {
+    const { env } = workspace();
+    assert.throws(() => readConfig({ ...env, MEC_COMPOSER_REPOSITORIES: raw }), /composer-repositories/);
+  });
+}
+
 test('step summaries can be turned off', () => {
   const { env } = workspace();
   assert.equal(readConfig({ ...env, MAGENTO_EXTENSION_CHECK_SUMMARY: 'false' }).stepSummary, false);
