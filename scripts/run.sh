@@ -3,7 +3,8 @@ set -uo pipefail
 
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIRROR="https://mirror.mage-os.org/"
-ALL_CHECKS="validate lint phpcs install compile unit phpstan"
+# phpcs runs after install so it can use the coding standard that the Magento release resolves.
+ALL_CHECKS="validate lint install phpcs compile unit phpstan"
 MAGENTO_CHECKS="install compile unit phpstan"
 SKIPPED=78
 

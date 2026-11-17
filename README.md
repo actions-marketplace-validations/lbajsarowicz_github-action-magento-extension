@@ -66,7 +66,7 @@ jobs:
       - uses: lbajsarowicz/github-action-magento-extension/static@v0
         with:
           php-version: ${{ matrix.php }}
-          annotations: ${{ strategy.job-index == 0 }}
+          checks: validate,lint
 
   magento:
     needs: matrix
@@ -86,7 +86,7 @@ jobs:
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
-          checks: install,compile,unit,phpstan
+          checks: install,phpcs,compile,unit,phpstan
           annotations: ${{ strategy.job-index == 0 }}
 ```
 
@@ -127,7 +127,17 @@ With the default ruleset `phpcs` fails at severity 10 and reports the rest as wa
 
 A repository PHPStan configuration brings its baseline through its own `includes:`. Without a configuration, `phpstan-baseline` loads a baseline on top of the default.
 
-Both tools are installed in their own directory, outside the Magento project. Coding standards and PHPStan packages listed in the extension's `require-dev` are installed there at the versions the extension asks for; if that fails, current releases are used and the log says so.
+## Tool versions
+
+Every Magento release declares its own development tools, and the checks use them:
+
+| Tool | Version used |
+|---|---|
+| PHPUnit | The one the release under test resolves (9.6 on 2.4.7, 10.5 on 2.4.8, 12.5 on 2.4.9 today) |
+| PHPStan | From the extension's `require-dev` when it lists PHPStan packages; otherwise the release's own PHPStan with the `bitexpert/phpstan-magento` version that fits it |
+| PHPCS and coding standard | From the extension's `require-dev` when it lists them; otherwise what the release resolves; in the static action, which installs no Magento, current releases |
+
+The summary of every check names the version it ran and where it came from.
 
 ## Inline findings
 

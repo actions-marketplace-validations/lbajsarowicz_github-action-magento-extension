@@ -105,10 +105,25 @@ check_phpcs() {
     [[ -s "$list" ]] || { note "no PHP files found"; return "$SKIPPED"; }
   fi
 
-  install_tools phpcs magento/magento-coding-standard
+  # Order of preference: the versions the extension asks for, then the ones the Magento release
+  # under test resolves, then current releases.
+  local phpcs own_tools tools_label
+  own_tools="$(php "$SCRIPTS/tool-packages.php" "$EXT/composer.json" phpcs)"
+  if [[ -z "$own_tools" && -x "$MAGENTO_ROOT/vendor/bin/phpcs" ]]; then
+    phpcs="$MAGENTO_ROOT/vendor/bin/phpcs"
+    tools_label="from Magento ${MEC_MAGENTO_VERSION}"
+  else
+    install_tools phpcs magento/magento-coding-standard
+    phpcs="$TOOLS/phpcs/vendor/bin/phpcs"
+    tools_label="$TOOLS_SOURCE"
+  fi
+  local versions
+  versions="PHPCS $("$phpcs" --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  versions="${versions}, coding standard $(composer --working-dir="$(dirname "$(dirname "$(dirname "$phpcs")")")" show --no-ansi magento/magento-coding-standard 2>/dev/null | awk '/^versions/ {print $NF}')"
+  echo "$versions ($tools_label)"
   local report="$RESULTS/phpcs.json"
   cd "$EXT"
-  "$TOOLS/phpcs/vendor/bin/phpcs" --standard="$standard" -s --file-list="$list" \
+  "$phpcs" --standard="$standard" -s --file-list="$list" \
     --report-full --report-json="$report" || true
   local totals
   totals="$(php -r '
@@ -127,7 +142,7 @@ check_phpcs() {
   local failing other rule="severity ${threshold}+"
   [[ "$threshold" == "errors" ]] && rule="errors"
   read -r failing other <<< "$totals"
-  note "${CONFIG_LABEL}; $(wc -l < "$list" | tr -d ' ') ${scope}: ${failing} ${rule}, ${other} other"
+  note "${CONFIG_LABEL}; ${versions} (${tools_label}); $(wc -l < "$list" | tr -d ' ') ${scope}: ${failing} ${rule}, ${other} other"
   [[ "$failing" -eq 0 ]]
 }
 
@@ -211,14 +226,33 @@ check_unit() {
     note "PHPUnit ran no tests from Test/Unit"
     return 1
   fi
-  note "${count} tests, ${assertions} assertions, ${broken} failing"
+  note "$(vendor/bin/phpunit --version | grep -oE 'PHPUnit [0-9.]+' | head -1) (from Magento ${MEC_MAGENTO_VERSION}); ${count} tests, ${assertions} assertions, ${broken} failing"
   return "$code"
 }
 
 check_phpstan() {
   resolve_config "$MEC_PHPSTAN_CONFIG" phpstan.neon phpstan.neon.dist phpstan.dist.neon
   local config="$CONFIG" label="$CONFIG_LABEL"
-  install_tools phpstan phpstan/phpstan bitexpert/phpstan-magento
+
+  # Order of preference: the versions the extension asks for, then PHPStan as the Magento release
+  # under test resolves it (with the Magento extension that fits that PHPStan), then current releases.
+  local phpstan extension tools_label own_tools
+  own_tools="$(php "$SCRIPTS/tool-packages.php" "$EXT/composer.json" phpstan)"
+  if [[ -z "$own_tools" && -x "$MAGENTO_ROOT/vendor/bin/phpstan" ]] \
+    && composer --working-dir="$MAGENTO_ROOT" require --dev --no-progress --no-audit --quiet bitexpert/phpstan-magento 2>&1; then
+    phpstan="$MAGENTO_ROOT/vendor/bin/phpstan"
+    extension="$MAGENTO_ROOT/vendor/bitexpert/phpstan-magento/extension.neon"
+    tools_label="from Magento ${MEC_MAGENTO_VERSION}"
+  else
+    install_tools phpstan phpstan/phpstan bitexpert/phpstan-magento
+    phpstan="$TOOLS/phpstan/vendor/bin/phpstan"
+    extension="$TOOLS/phpstan/vendor/bitexpert/phpstan-magento/extension.neon"
+    tools_label="$TOOLS_SOURCE"
+  fi
+  local versions
+  versions="PHPStan $("$phpstan" --version --no-ansi | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  echo "$versions ($tools_label)"
+
   if [[ -z "$config" ]]; then
     local baseline=""
     if [[ -n "$MEC_PHPSTAN_BASELINE" ]]; then
@@ -229,7 +263,7 @@ check_phpstan() {
     config="$WORK/phpstan.neon"
     {
       echo "includes:"
-      echo "    - ${TOOLS}/phpstan/vendor/bitexpert/phpstan-magento/extension.neon"
+      echo "    - ${extension}"
       [[ -z "$baseline" ]] || echo "    - ${baseline}"
       echo "parameters:"
       echo "    level: ${MEC_PHPSTAN_LEVEL}"
@@ -244,7 +278,7 @@ check_phpstan() {
   fi
   cd "$MAGENTO_ROOT"
   local report="$RESULTS/phpstan.json" code=0
-  "$TOOLS/phpstan/vendor/bin/phpstan" analyse --no-progress --memory-limit=-1 --configuration="$config" \
+  "$phpstan" analyse --no-progress --memory-limit=-1 --configuration="$config" \
     --autoload-file="$MAGENTO_ROOT/vendor/autoload.php" --error-format=json > "$report" || code=$?
   local count
   count="$(php -r '
@@ -264,6 +298,6 @@ check_phpstan() {
     note "PHPStan configuration could not be loaded (${label})"
     return 1
   fi
-  note "${label}; ${count} finding(s); tools: ${TOOLS_SOURCE}"
+  note "${label}; ${versions} (${tools_label}); ${count} finding(s)"
   return "$code"
 }
