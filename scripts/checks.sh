@@ -157,21 +157,24 @@ check_install() {
   composer config audit.block-insecure false
   composer update --no-progress --no-audit
 
-  local installed module registered
+  local installed module registered differences
   installed="$(cd "$(composer show --path "$EXT_NAME" | awk '{print $2}')" && pwd -P)"
-  [[ "$installed" == "$EXT" ]] || { note "Composer installed ${EXT_NAME} from ${installed}, not from the checkout"; return 1; }
+  [[ "$installed" == "$MAGENTO_ROOT/vendor/"* ]] || { note "Composer installed ${EXT_NAME} at an unexpected place: ${installed}"; return 1; }
+  differences="$(diff -rq --exclude=.git --exclude=vendor "$EXT" "$installed" | head -5 || true)"
+  [[ -z "$differences" ]] || { echo "$differences"; note "the installed ${EXT_NAME} is not identical to the checkout"; return 1; }
   for module in $MODULE_NAMES; do
     registered="$(php -r '
       require $argv[1] . "/vendor/autoload.php";
       $path = (new \Magento\Framework\Component\ComponentRegistrar())->getPath("module", $argv[2]);
       echo $path ? realpath($path) : "";
     ' "$MAGENTO_ROOT" "$module")"
-    [[ "$registered" == "$EXT" || "$registered" == "$EXT/"* ]] \
+    [[ "$registered" == "$installed" || "$registered" == "$installed/"* ]] \
       || { note "${module} is not registered from the checkout (found: ${registered:-nowhere})"; return 1; }
   done
+  echo "$installed" > "$WORK/installed-path"
 
   composer show magento/product-community-edition | grep -E '^versions'
-  note "Composer $(composer --version --no-ansi | awk '{print $3}'), ${EXT_NAME} symlinked from the checkout"
+  note "Composer $(composer --version --no-ansi | awk '{print $3}'), ${EXT_NAME} installed as an exact copy of the checkout"
 }
 
 check_compile() {
@@ -223,7 +226,9 @@ run_phpunit() {
 
 check_unit() {
   local directories
-  directories="$(find "$EXT" -maxdepth 6 -type d -path '*/Test/Unit' -not -path '*/vendor/*' | sort)"
+  local source
+  source="$(cat "$WORK/installed-path")"
+  directories="$(find "$source" -maxdepth 6 -type d -path '*/Test/Unit' -not -path "$source/vendor/*" | sort)"
   [[ -n "$directories" ]] || { note "no Test/Unit directory"; return "$SKIPPED"; }
   cd "$MAGENTO_ROOT"
   local config="$MAGENTO_ROOT/dev/tests/unit/phpunit.extension-check.xml" directory
@@ -250,7 +255,9 @@ check_unit() {
 
 check_integration() {
   local directories
-  directories="$(find "$EXT" -maxdepth 6 -type d -path '*/Test/Integration' -not -path '*/vendor/*' | sort)"
+  local source
+  source="$(cat "$WORK/installed-path")"
+  directories="$(find "$source" -maxdepth 6 -type d -path '*/Test/Integration' -not -path "$source/vendor/*" | sort)"
   [[ -n "$directories" ]] || { note "no Test/Integration directory"; return "$SKIPPED"; }
   if command -v mysql > /dev/null; then
     # Magento creates triggers during installation, which MySQL refuses with binary logging on.

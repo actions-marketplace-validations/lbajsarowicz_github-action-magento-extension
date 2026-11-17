@@ -12,7 +12,8 @@ $project['repositories'] = [
     [
         'type' => 'path',
         'url' => $extensionPath,
-        'options' => ['symlink' => true],
+        // Copied, not symlinked: Magento refuses to deploy view files that resolve outside its root.
+        'options' => ['symlink' => false],
     ],
     [
         'type' => 'composer',

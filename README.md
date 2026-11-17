@@ -11,7 +11,7 @@ Status: proof of concept.
 | `validate` | `composer validate`; `registration.php` and `etc/module.xml` agree on the module name | no |
 | `lint` | PHP syntax of every `.php` and `.phtml` file | no |
 | `phpcs` | PHPCS on the PHP files changed by the pull request or push, with the repository's ruleset or the official Magento 2 coding standard | no |
-| `install` | Installs the release from the Mage-OS mirror with your checkout as a Composer path package, then proves the installed and registered module is the checkout | yes |
+| `install` | Installs the release from the Mage-OS mirror with your checkout as a Composer path package, then proves the installed and registered module is an exact copy of the checkout | yes |
 | `compile` | `module:enable --all` and `setup:di:compile`, without a database | yes |
 | `unit` | PHPUnit shipped with that release, on `Test/Unit` | yes |
 | `phpstan` | PHPStan with the repository's configuration, or a default that loads `bitexpert/phpstan-magento` | yes |
