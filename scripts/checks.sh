@@ -160,6 +160,9 @@ check_install() {
   local installed module registered differences
   installed="$(cd "$(composer show --path "$EXT_NAME" | awk '{print $2}')" && pwd -P)"
   [[ "$installed" == "$MAGENTO_ROOT/vendor/"* ]] || { note "Composer installed ${EXT_NAME} at an unexpected place: ${installed}"; return 1; }
+  # Composer leaves out what .gitattributes marks export-ignore, which usually includes the tests.
+  # The checks are about the checkout, so the copy is completed from it.
+  rsync -a --delete --exclude=.git --exclude=/vendor "$EXT/" "$installed/"
   differences="$(diff -rq --exclude=.git --exclude=vendor "$EXT" "$installed" | head -5 || true)"
   [[ -z "$differences" ]] || { echo "$differences"; note "the installed ${EXT_NAME} is not identical to the checkout"; return 1; }
   for module in $MODULE_NAMES; do
