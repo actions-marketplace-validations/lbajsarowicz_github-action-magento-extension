@@ -12,7 +12,8 @@ const { findingsFromReport, annotationLines } = require('../src/annotations');
 const { changedFiles } = require('../src/changed-files');
 const { recordCheck, overallStatus } = require('../src/results');
 const { mirrorDirectory, differences } = require('../src/copy');
-const { unitConfiguration } = require('../src/checks/phpunit');
+const { unitConfiguration, runPhpunit } = require('../src/checks/phpunit');
+const { CheckFailed } = require('../src/errors');
 const { defaultConfiguration } = require('../src/checks/phpstan');
 const { resolveToolConfig } = require('../src/checks/tool-config');
 const { workspace } = require('./helpers');
@@ -210,4 +211,35 @@ test('tool configuration: input, then repository file, then default', () => {
   assert.throws(() => resolveToolConfig(ctx, '../outside.xml', candidates), /does not exist in the workspace/);
   fs.rmSync(path.join(extension, 'phpcs.xml.dist'));
   assert.deepEqual(resolveToolConfig(ctx, '', candidates), { file: null, label: 'action default' });
+});
+
+test('PHPUnit without tests is a warning, without a report a failure', async () => {
+  const { root } = workspace();
+  const config = { magentoRoot: path.join(root, 'magento'), magentoVersion: '2.4.8-p5', results: path.join(root, 'results'), testdox: false };
+  fs.mkdirSync(config.results, { recursive: true });
+  const ctx = (report, code) => ({
+    config,
+    sh: {
+      exec: async (command, args) => {
+        if (args[0] === '--version') {
+          return { code: 0, stdout: 'PHPUnit 10.5.45 by Sebastian Bergmann' };
+        }
+        const junit = args[args.indexOf('--log-junit') + 1];
+        fs.rmSync(junit, { force: true });
+        if (report !== null) {
+          fs.writeFileSync(junit, report);
+        }
+        return { code, stdout: '' };
+      },
+    },
+  });
+  const empty = '<testsuites><testsuite name="extension" tests="0" assertions="0" failures="0" errors="0"></testsuite></testsuites>';
+  const none = await runPhpunit(ctx(empty, 0), 'unit', [], root);
+  assert.equal(none.status, 'warning');
+  assert.match(none.note, /PHPUnit 10\.5\.45 .*no tests were run/);
+
+  const ran = await runPhpunit(ctx(empty.replace('tests="0" assertions="0"', 'tests="2" assertions="3"'), 0), 'unit', [], root);
+  assert.equal(ran.status, 'passed');
+
+  await assert.rejects(runPhpunit(ctx(null, 255), 'unit', [], root), (error) => error instanceof CheckFailed && /did not finish \(exit code 255\)/.test(error.note));
 });

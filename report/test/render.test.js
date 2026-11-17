@@ -85,3 +85,12 @@ test('notes cannot break the table or inject markup', () => {
   assert.ok(!markdown.includes('<script>'));
   assert.match(markdown, /a \\\| b &lt;script&gt;/);
 });
+
+test('a warning passes and shows its note in the failure table', () => {
+  const warned = buildReport([], [{ magento: '2.4.9', php: '8.5', checks: [check('unit', 'warning', 'no tests were run')], logs: {} }]);
+  assert.equal(warned.status, 'passed');
+  const report = buildReport([], [
+    { magento: '2.4.9', php: '8.5', checks: [check('unit', 'warning', 'no tests were run'), check('phpstan', 'failed', '1 finding')], logs: {} },
+  ]);
+  assert.match(renderMarkdown(report, 'Magento Check'), /\| ⚠️ \| Unit tests \| no tests were run \|/);
+});

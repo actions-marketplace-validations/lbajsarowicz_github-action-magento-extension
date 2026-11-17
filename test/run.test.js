@@ -133,3 +133,13 @@ test('the step summary lists only the checks of this step', async () => {
   writeStepSummary({ ...result.config, stepSummary: false }, result, silent);
   assert.equal(fs.existsSync(silent), false);
 });
+
+test('a warning does not fail the step and becomes a warning annotation', async () => {
+  const { env } = workspace();
+  const result = await step(env, 'unit', { install: pass(), unit: async () => ({ status: 'warning', note: 'PHPUnit 10.5: no tests were run' }) });
+  assert.equal(result.status, 'passed');
+  assert.match(result.output, /::warning title=Magento 2\.4\.8-p5 @ PHP 8\.4%3A unit::PHPUnit 10\.5: no tests were run/);
+  assert.doesNotMatch(result.output, /::error/);
+  const saved = JSON.parse(fs.readFileSync(path.join(result.config.results, 'results.json'), 'utf8'));
+  assert.equal(saved.status, 'passed');
+});

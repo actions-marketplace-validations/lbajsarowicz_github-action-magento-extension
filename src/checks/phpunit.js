@@ -25,7 +25,8 @@ function unitConfiguration(directories) {
 }
 
 /**
- * Runs the PHPUnit that the Magento release resolved. Zero executed tests is a failure.
+ * Runs the PHPUnit that the Magento release resolved. A suite without tests is a warning; a run that
+ * did not write its JUnit report did not finish and fails.
  */
 async function runPhpunit(ctx, name, args, cwd) {
   const { config } = ctx;
@@ -40,8 +41,11 @@ async function runPhpunit(ctx, name, args, cwd) {
   }
   const totals = junitTotals(xml);
   const version = (/PHPUnit [0-9.]+/.exec((await ctx.sh.exec(binary, ['--version'], { echo: false, allowFailure: true })).stdout) || ['PHPUnit'])[0];
+  if (xml === '') {
+    throw new CheckFailed(`${version} did not finish (exit code ${run.code})`);
+  }
   if (totals.tests === 0) {
-    throw new CheckFailed(`${version}: no tests were run`);
+    return { status: 'warning', note: `${version} (from Magento ${config.magentoVersion}): no tests were run` };
   }
   const note = `${version} (from Magento ${config.magentoVersion}); ${totals.tests} tests, ${totals.assertions} assertions, ${totals.broken} failing`;
   return { status: run.code === 0 ? 'passed' : 'failed', note };
@@ -97,4 +101,4 @@ async function integration(ctx) {
   return runPhpunit(ctx, 'integration', ['-c', configuration], tests);
 }
 
-module.exports = { unit, integration, unitConfiguration };
+module.exports = { unit, integration, unitConfiguration, runPhpunit };

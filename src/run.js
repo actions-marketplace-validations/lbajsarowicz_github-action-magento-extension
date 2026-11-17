@@ -92,6 +92,7 @@ async function runChecks(config, implementations, { write = (text) => process.st
   let checks = loadChecks(config);
   const ran = [];
   const failures = [];
+  const warnings = [];
   const installed = readInstallState(config);
   let installStatus = installed ? installed.status : '';
 
@@ -119,10 +120,13 @@ async function runChecks(config, implementations, { write = (text) => process.st
     if (FAILING.includes(row.status)) {
       failures.push(`::error title=${property(`${config.label}: ${check} ${row.status}`)}::${data(row.note || `See the '${check}' group in the log.`)}`);
     }
+    if (row.status === 'warning') {
+      warnings.push(`::warning title=${property(`${config.label}: ${check}`)}::${data(row.note)}`);
+    }
   }
   // Printed last: inline findings come first in GitHub's limit of 10 errors per step.
-  for (const failure of failures) {
-    write(`${failure}\n`);
+  for (const line of [...failures, ...warnings]) {
+    write(`${line}\n`);
   }
   saveResults(config, checks, phpRuntime);
   return { status: failures.length === 0 ? 'passed' : 'failed', ran, checks };

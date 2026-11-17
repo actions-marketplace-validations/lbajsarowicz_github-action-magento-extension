@@ -16,7 +16,7 @@ Status: proof of concept.
 | `unit` | PHPUnit shipped with that release, on `Test/Unit` | yes |
 | `phpstan` | PHPStan with the repository's configuration, or a default that loads `bitexpert/phpstan-magento` | yes |
 
-A check with nothing to run is reported as `skipped`. `compile`, `unit` and `phpstan` are `blocked` when `install` fails.
+A check with nothing to run is reported as `skipped`. When `Test/Unit` or `Test/Integration` exists but PHPUnit runs no test from it, the check is reported as `warning`, which does not fail the step. `compile`, `unit` and `phpstan` are `blocked` when `install` fails.
 
 ## Actions in this repository
 
