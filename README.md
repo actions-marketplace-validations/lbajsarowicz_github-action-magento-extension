@@ -1,8 +1,50 @@
 # Magento Extension Check
 
-Checks a Magento 2 extension against one Magento Open Source release and one PHP version. Combine it with [Magento Version Matrix](https://github.com/lbajsarowicz/github-action-magento-matrix) to cover every supported release.
+[![CI](https://github.com/lbajsarowicz/github-action-magento-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/lbajsarowicz/github-action-magento-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/lbajsarowicz/github-action-magento-extension?sort=semver)](https://github.com/lbajsarowicz/github-action-magento-extension/releases/latest)
+[![GitHub Marketplace](https://img.shields.io/badge/marketplace-magento--extension--check-blue?logo=github)](https://github.com/marketplace/actions/magento-extension-check)
+[![License: MIT](https://img.shields.io/github/license/lbajsarowicz/github-action-magento-extension)](LICENSE)
 
-Status: proof of concept.
+Checks a Magento 2 extension against one Magento Open Source release and one PHP version: Composer metadata, PHP syntax, the Magento coding standard, a real install from the Mage-OS mirror, `setup:di:compile`, unit and integration tests, and PHPStan. Combine it with [Magento Version Matrix](https://github.com/lbajsarowicz/github-action-magento-matrix) to cover every supported release in one pull request.
+
+## Quick start
+
+One Magento release, one PHP version, every check the inputs allow, in a single job:
+
+```yaml
+name: Magento Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read # list the files changed by the pull request
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+          coverage: none
+          tools: composer:v2
+      - uses: lbajsarowicz/github-action-magento-extension@v1
+        with:
+          magento-version: '2.4.8-p5'
+          php-version: '8.4'
+```
+
+For every supported release and PHP version at once, with one result table per pull request, see Usage.
 
 ## Checks
 
@@ -64,7 +106,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - id: matrix
-        uses: lbajsarowicz/github-action-magento-matrix@v0
+        uses: lbajsarowicz/github-action-magento-matrix@v1
 
   check:
     name: "Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
@@ -116,7 +158,7 @@ jobs:
 
       - name: Composer and syntax
         id: static
-        uses: lbajsarowicz/github-action-magento-extension/static@v0
+        uses: lbajsarowicz/github-action-magento-extension/static@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -124,14 +166,14 @@ jobs:
 
       - name: Install Magento ${{ matrix.magento }}
         id: install
-        uses: lbajsarowicz/github-action-magento-extension/install@v0
+        uses: lbajsarowicz/github-action-magento-extension/install@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
 
       - name: PHPCS
         id: phpcs
-        uses: lbajsarowicz/github-action-magento-extension/phpcs@v0
+        uses: lbajsarowicz/github-action-magento-extension/phpcs@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -140,7 +182,7 @@ jobs:
       - name: Compile and static content
         id: compile
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        uses: lbajsarowicz/github-action-magento-extension/compile@v0
+        uses: lbajsarowicz/github-action-magento-extension/compile@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -148,7 +190,7 @@ jobs:
       - name: Unit tests
         id: unit
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
-        uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
+        uses: lbajsarowicz/github-action-magento-extension/phpunit@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -158,7 +200,7 @@ jobs:
       - name: Integration tests
         id: integration
         if: ${{ !cancelled() && steps.unit.outcome == 'success' }}
-        uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
+        uses: lbajsarowicz/github-action-magento-extension/phpunit@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -169,7 +211,7 @@ jobs:
       - name: PHPStan
         id: phpstan
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
-        uses: lbajsarowicz/github-action-magento-extension/phpstan@v0
+        uses: lbajsarowicz/github-action-magento-extension/phpstan@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -195,7 +237,7 @@ jobs:
         with:
           pattern: magento-check-*
           path: magento-check-results
-      - uses: lbajsarowicz/github-action-magento-extension/report@v0
+      - uses: lbajsarowicz/github-action-magento-extension/report@v1
         with:
           matrix: ${{ needs.matrix.outputs.matrix }}
           checks: validate,lint,install,phpcs,compile,static-content,unit,integration,phpstan
@@ -281,7 +323,7 @@ The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry
       - name: Integration tests
         id: integration
         if: ${{ !cancelled() && steps.unit.outcome == 'success' }}
-        uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
+        uses: lbajsarowicz/github-action-magento-extension/phpunit@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -323,7 +365,7 @@ Every sub-action can also be its own job, which gives one row per check and comb
           extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
           coverage: none
           tools: composer:v2
-      - uses: lbajsarowicz/github-action-magento-extension/compile@v0
+      - uses: lbajsarowicz/github-action-magento-extension/compile@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -374,7 +416,7 @@ A repository PHPStan configuration brings its baseline through its own `includes
 By default Magento and its dependencies come from the public mirror `mirror.mage-os.org` and from Packagist. `composer-repositories` replaces that with your own list, in the format of the `repositories` section of a `composer.json`. Credentials go in `COMPOSER_AUTH`.
 
 ```yaml
-      - uses: lbajsarowicz/github-action-magento-extension/install@v0
+      - uses: lbajsarowicz/github-action-magento-extension/install@v1
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
@@ -438,7 +480,7 @@ annotations: ${{ strategy.job-index == 0 }}
 
 `contents: read` for the checkout. In a private repository add `pull-requests: read` so the action can list the changed files; without it PHPCS checks every file.
 
-## Known limits of this proof of concept
+## Known limits
 
 - One Composer package per run (it may hold several modules); Magento Open Source only.
 - The release's own development dependencies are installed together with the extension, in one dependency graph.
@@ -449,7 +491,7 @@ annotations: ${{ strategy.job-index == 0 }}
 
 ## Releases
 
-Every merge to `main` publishes a release candidate (`vX.Y.Z-rc.N`). Marking a candidate as a full release retags it to `vX.Y.Z` and moves the major tag.
+Every merge to `main` publishes a release candidate (`vX.Y.Z-rc.N`). Marking a candidate as a full release retags it to `vX.Y.Z` and moves the major tag. Pin `@v1` to follow compatible releases, or a full `vX.Y.Z` tag or commit SHA to stay on one.
 
 ## License
 
