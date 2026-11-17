@@ -261,7 +261,7 @@ The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry
     runs-on: ubuntu-24.04
     container:
       image: wardenenv/php-fpm:${{ matrix.php }}-magento2
-      options: --user root
+      options: --user 1001
     # strategy, env and services as above
     steps:
       - uses: actions/checkout@v7
@@ -272,8 +272,9 @@ The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry
       # image, which is what selects Composer 2.
       - name: Select Composer 2
         run: |
-          cp /usr/bin/composer2 /usr/bin/composer
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/bin"
+          ln -sf /usr/bin/composer2 "$HOME/bin/composer"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
 
       # ... the same steps ...
 
@@ -290,8 +291,8 @@ The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry
           search-host: opensearch
 ```
 
-1. `container:` with `--user root`, because GitHub writes the workspace and its own files as root.
-2. `Select Composer 2` in place of `Set up PHP`. Its second line lets Git, and so Composer, read the checkout, which belongs to another user than the one in the container.
+1. `container:` with `--user 1001`. That is the user GitHub-hosted runners work as, and the workspace and the runner's own files belong to it. The image's default user (`www-data`, 1000) cannot write there, so `actions/checkout` fails. Root is not needed; on a self-hosted runner use the uid of the runner's user.
+2. `Select Composer 2` in place of `Set up PHP`. The image holds Composer as `composer2`; the step links it as `composer` in the user's own `bin` directory and adds that to the `PATH`.
 3. Services are reached by their name (`mariadb`, `opensearch`), not through `127.0.0.1`.
 
 Any other image works the same way, as long as it has the tools in the table. On a self-hosted runner a container image is the better choice, because nothing is installed on the host.
