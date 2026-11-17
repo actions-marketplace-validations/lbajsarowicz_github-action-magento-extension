@@ -270,6 +270,15 @@ check_integration() {
   return "$code"
 }
 
+phpstan_resolves_generated_classes() {
+  local probe="$WORK/phpstan-probe"
+  rm -rf "$probe" && mkdir -p "$probe"
+  printf '<?php\nfunction magentoExtensionCheckProbe(\\Magento\\Framework\\DataObjectFactory $factory): void\n{\n}\n' > "$probe/probe.php"
+  printf 'includes:\n    - %s\nparameters:\n    level: 2\n    tmpDir: %s/tmp\n    paths:\n        - %s/probe.php\n' "$2" "$probe" "$probe" > "$probe/phpstan.neon"
+  ( cd "$MAGENTO_ROOT" && "$1" analyse --no-progress --memory-limit=-1 --configuration="$probe/phpstan.neon" \
+      --autoload-file="$MAGENTO_ROOT/vendor/autoload.php" --error-format=raw > "$probe/output.txt" 2>&1 )
+}
+
 check_phpstan() {
   resolve_config "$MEC_PHPSTAN_CONFIG" phpstan.neon phpstan.neon.dist phpstan.dist.neon
   local config="$CONFIG" label="$CONFIG_LABEL"
@@ -288,6 +297,15 @@ check_phpstan() {
     phpstan="$TOOLS/phpstan/vendor/bin/phpstan"
     extension="$TOOLS/phpstan/vendor/bitexpert/phpstan-magento/extension.neon"
     tools_label="$TOOLS_SOURCE"
+  fi
+  # An older Magento extension for PHPStan may not cope with a newer PHP or Magento. A two-line
+  # probe tells whether generated classes resolve; if not, current releases of both are used.
+  if [[ "$phpstan" == "$MAGENTO_ROOT/"* ]] && ! phpstan_resolves_generated_classes "$phpstan" "$extension"; then
+    echo "PHPStan from Magento ${MEC_MAGENTO_VERSION} does not resolve generated classes with the extension it allows; using current releases."
+    install_tools phpstan phpstan/phpstan bitexpert/phpstan-magento
+    phpstan="$TOOLS/phpstan/vendor/bin/phpstan"
+    extension="$TOOLS/phpstan/vendor/bitexpert/phpstan-magento/extension.neon"
+    tools_label="current releases; the release's own could not resolve generated classes"
   fi
   local versions
   versions="PHPStan $("$phpstan" --version --no-ansi | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
