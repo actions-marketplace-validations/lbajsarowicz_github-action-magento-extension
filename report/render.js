@@ -44,8 +44,9 @@ function cellKey(cell) {
 /**
  * @param {Array<{magento: string, php: string}>} expected cells of the matrix
  * @param {Array<{magento: ?string, php: string, checks: Array, logs: Object}>} results one per uploaded result
+ * @param {string[]} expectedChecks checks the workflow runs; one that no job reached is shown as not run
  */
-function buildReport(expected, results) {
+function buildReport(expected, results, expectedChecks = []) {
   const byKey = new Map(results.map((result) => [cellKey(result), result]));
   const cells = expected.map((cell) => ({ magento: cell.magento, php: String(cell.php) }));
   for (const result of results) {
@@ -55,7 +56,7 @@ function buildReport(expected, results) {
   }
 
   const present = new Set(results.flatMap((result) => result.checks.map((check) => check.check)));
-  const columns = CHECKS.filter(([name]) => present.has(name));
+  const columns = CHECKS.filter(([name]) => present.has(name) || (results.length > 0 && expectedChecks.includes(name)));
 
   const rows = cells.map((cell) => {
     const result = byKey.get(cellKey(cell));
@@ -150,4 +151,4 @@ function renderMarkdown(report, title) {
   return lines.join('\n');
 }
 
-module.exports = { buildReport, renderMarkdown };
+module.exports = { buildReport, renderMarkdown, CHECKS };

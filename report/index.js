@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildReport, renderMarkdown } = require('./render');
+const { buildReport, renderMarkdown, CHECKS } = require('./render');
 
 const LOG_LINES = 40;
 const LOG_CHARACTERS = 6000;
@@ -60,7 +60,12 @@ function main() {
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
   const directory = path.resolve(workspace, input('path', 'magento-check-results'));
   const results = findResults(directory).map(readResult);
-  const report = buildReport(expectedCells(input('matrix', '')), results);
+  const expectedChecks = input('checks', '').split(/[\s,]+/).filter(Boolean);
+  const unknown = expectedChecks.filter((name) => !CHECKS.some(([check]) => check === name));
+  if (unknown.length > 0) {
+    throw new Error(`checks names unknown checks: ${unknown.join(', ')}.`);
+  }
+  const report = buildReport(expectedCells(input('matrix', '')), results, expectedChecks);
   const markdown = renderMarkdown(report, input('title', 'Magento Check'));
 
   if (process.env.GITHUB_STEP_SUMMARY) {

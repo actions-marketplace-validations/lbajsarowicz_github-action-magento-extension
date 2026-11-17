@@ -13,6 +13,12 @@ inputs:
       there without a result is reported and fails the report.
     required: false
     default: ''
+  checks:
+    description: >-
+      Comma-separated checks that the workflow runs, such as `validate,lint,install,phpcs,compile,static-content,unit,phpstan`.
+      A check listed here that no job reached is shown as not run. Without it the table has a column for every check that ran somewhere.
+    required: false
+    default: ''
   title:
     description: 'Heading of the report.'
     required: false

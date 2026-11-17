@@ -52,6 +52,16 @@ test('skipped checks do not fail, blocked checks do', () => {
   assert.equal(blocked.status, 'failed');
 });
 
+test('expected checks that no job reached are shown as not run', () => {
+  const report = buildReport(matrix, [
+    { magento: '2.4.8-p5', php: '8.4', checks: [check('compile', 'failed')], logs: {} },
+    { magento: '2.4.9', php: '8.5', checks: [check('compile', 'failed')], logs: {} },
+  ], ['compile', 'unit', 'phpstan']);
+  assert.deepEqual(report.columns.map(([name]) => name), ['compile', 'unit', 'phpstan']);
+  assert.deepEqual(report.rows[0].outcomes.map((outcome) => outcome.status), ['failed', 'not-run', 'not-run']);
+  assert.match(renderMarkdown(report, 'Magento Check'), /Not run: Unit tests, PHPStan\./);
+});
+
 test('no results at all is a failure', () => {
   const report = buildReport([], []);
   assert.equal(report.status, 'failed');

@@ -303,6 +303,7 @@ jobs:
       - uses: lbajsarowicz/github-action-magento-extension/report@v0
         with:
           matrix: ${{ needs.matrix.outputs.matrix }}
+          checks: validate,lint,install,phpcs,compile,static-content,unit,integration,phpstan
       - name: Fail unless every job succeeded
         if: ${{ always() }}
         env:
