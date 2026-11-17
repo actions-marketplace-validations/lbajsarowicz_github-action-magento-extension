@@ -27,17 +27,28 @@ async function lint(ctx) {
     return { status: 'skipped', note: 'no PHP files found' };
   }
   let broken = 0;
+  let crashed = null;
   const queue = [...files];
   const worker = async () => {
     for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
-      const result = await ctx.sh.exec('php', ['-l', file], { echo: false, allowFailure: true });
-      if (result.code !== 0) {
+      // Without php.ini: a syntax check needs no extension, and a faulty one cannot get in its way.
+      const result = await ctx.sh.exec('php', ['-n', '-l', file], { echo: false, allowFailure: true });
+      if (result.code === 0) {
+        continue;
+      }
+      if (/(Parse|Fatal) error|Errors parsing/i.test(result.output)) {
         broken += 1;
         ctx.log(result.output.trim());
+      } else {
+        crashed = crashed || `php -l stopped with exit code ${result.code} on ${file}`;
+        ctx.log(`${crashed}\n${result.output.trim()}`);
       }
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
+  if (crashed) {
+    throw new CheckFailed(`PHP itself failed, which says nothing about the code: ${crashed}`);
+  }
   if (broken > 0) {
     throw new CheckFailed(`${broken} of ${files.length} files have syntax errors`);
   }

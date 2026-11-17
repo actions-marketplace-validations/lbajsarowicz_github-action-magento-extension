@@ -271,7 +271,9 @@ The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry
       # In place of the "Set up PHP" step. A job container starts without the entrypoint of the
       # image, which is what selects Composer 2.
       - name: Select Composer 2
-        run: cp /usr/bin/composer2 /usr/bin/composer
+        run: |
+          cp /usr/bin/composer2 /usr/bin/composer
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # ... the same steps ...
 
@@ -289,7 +291,7 @@ The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry
 ```
 
 1. `container:` with `--user root`, because GitHub writes the workspace and its own files as root.
-2. `Select Composer 2` in place of `Set up PHP`.
+2. `Select Composer 2` in place of `Set up PHP`. Its second line lets Git, and so Composer, read the checkout, which belongs to another user than the one in the container.
 3. Services are reached by their name (`mariadb`, `opensearch`), not through `127.0.0.1`.
 
 Any other image works the same way, as long as it has the tools in the table. On a self-hosted runner a container image is the better choice, because nothing is installed on the host.
