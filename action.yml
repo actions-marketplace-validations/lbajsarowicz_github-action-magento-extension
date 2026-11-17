@@ -66,6 +66,10 @@ inputs:
     description: 'PHPStan rule level of the default configuration.'
     required: false
     default: '1'
+  phpunit-testdox:
+    description: 'Print the name of every test as a readable sentence (PHPUnit `--testdox`).'
+    required: false
+    default: 'false'
 
 outputs:
   status:
@@ -127,6 +131,7 @@ runs:
         MEC_PHPSTAN_CONFIG: ${{ inputs.phpstan-config }}
         MEC_PHPSTAN_BASELINE: ${{ inputs.phpstan-baseline }}
         MEC_ANNOTATIONS: ${{ inputs.annotations }}
+        MEC_PHPUNIT_TESTDOX: ${{ inputs.phpunit-testdox }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
       run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
 

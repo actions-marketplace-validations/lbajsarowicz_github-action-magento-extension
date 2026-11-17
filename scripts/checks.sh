@@ -209,7 +209,9 @@ check_static_content() {
 # Sets PHPUNIT_SUMMARY and returns PHPUnit's exit code; zero executed tests is a failure.
 run_phpunit() {
   local junit="$1" code=0; shift
-  "$MAGENTO_ROOT/vendor/bin/phpunit" "$@" --log-junit "$junit" || code=$?
+  local arguments=("$@" --log-junit "$junit")
+  [[ "$MEC_PHPUNIT_TESTDOX" == "true" ]] && arguments+=(--testdox)
+  "$MAGENTO_ROOT/vendor/bin/phpunit" "${arguments[@]}" || code=$?
   local summary count assertions broken
   summary="$(php -r '
     $x = @simplexml_load_file($argv[1]);

@@ -184,6 +184,7 @@ The static action takes `php-version`, `checks`, `path`, `phpcs-config`, `phpcs-
 | `annotations` | `true` | Show PHPCS and PHPStan findings inline in the pull request diff |
 | `github-token` | `github.token` | Only reads the list of changed files |
 | `phpstan-level` | `1` | Level of the default PHPStan configuration |
+| `phpunit-testdox` | `false` | Print every test name as a readable sentence (PHPUnit `--testdox`); `testdox` in the `phpunit` action |
 
 Private Composer repositories: set `COMPOSER_AUTH` in the step's `env`.
 

@@ -68,7 +68,9 @@ export EXT_NAME MODULE_NAMES
 [[ "$MEC_LOCALES" =~ ^[A-Za-z_]+(\ [A-Za-z_]+)*$ ]] || fail_config "locales must be a space-separated list such as 'en_US de_DE'."
 [[ "$MEC_DB_NAME" =~ ^[A-Za-z0-9_]+$ && "$MEC_DB_PORT" =~ ^[0-9]+$ && "$MEC_SEARCH_PORT" =~ ^[0-9]+$ ]] || fail_config "database name or ports are not valid."
 [[ "$MEC_SEARCH_ENGINE" =~ ^(opensearch|elasticsearch7|elasticsearch8)$ ]] || fail_config "search-engine must be opensearch, elasticsearch7 or elasticsearch8."
-export MEC_DB_HOST MEC_DB_PORT MEC_DB_USER MEC_DB_PASSWORD MEC_DB_NAME MEC_SEARCH_ENGINE MEC_SEARCH_HOST MEC_SEARCH_PORT
+: "${MEC_PHPUNIT_TESTDOX:=false}"
+[[ "$MEC_PHPUNIT_TESTDOX" =~ ^(true|false)$ ]] || fail_config "testdox must be true or false."
+export MEC_PHPUNIT_TESTDOX MEC_DB_HOST MEC_DB_PORT MEC_DB_USER MEC_DB_PASSWORD MEC_DB_NAME MEC_SEARCH_ENGINE MEC_SEARCH_HOST MEC_SEARCH_PORT
 
 # shellcheck source=checks.sh
 source "$SCRIPTS/checks.sh"

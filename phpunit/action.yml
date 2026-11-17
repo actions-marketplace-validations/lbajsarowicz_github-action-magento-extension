@@ -20,6 +20,10 @@ inputs:
       service in the job.
     required: false
     default: 'unit'
+  testdox:
+    description: 'Print the name of every test as a readable sentence (PHPUnit `--testdox`).'
+    required: false
+    default: 'false'
   db-host:
     description: 'Database host for integration tests.'
     required: false
@@ -101,6 +105,7 @@ runs:
         MEC_PHPSTAN_CONFIG: ''
         MEC_PHPSTAN_BASELINE: ''
         MEC_ANNOTATIONS: 'false'
+        MEC_PHPUNIT_TESTDOX: ${{ inputs.testdox }}
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
         MEC_DB_HOST: ${{ inputs.db-host }}
         MEC_DB_PORT: ${{ inputs.db-port }}
