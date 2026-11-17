@@ -107,26 +107,26 @@ function renderMarkdown(report, title) {
   }
   lines.push('', '✅ passed · ❌ failed · ➖ nothing to run · ⛔ blocked by a failed install · ⚪ not run · ❔ no result', '');
 
-  const failures = rows.flatMap((row) => row.outcomes
-    .filter((outcome) => outcome.status === 'failed')
-    .map((outcome) => ({ row, outcome })));
-  const lost = rows.filter((row) => row.outcomes.length === 0 || row.outcomes.every((outcome) => outcome.status === 'missing'));
-
-  if (failures.length > 0 || lost.length > 0) {
+  const troubled = rows.filter((row) => row.failed);
+  if (troubled.length > 0) {
     lines.push('### What failed', '');
-    for (const { row, outcome } of failures) {
-      lines.push(`**${inline(row.label)}: ${outcome.title}**`);
-      if (outcome.note) {
-        lines.push('', inline(outcome.note));
+    for (const row of troubled) {
+      lines.push(`#### ${inline(row.label)}`, '');
+      const failures = row.outcomes.filter((outcome) => outcome.status === 'failed');
+      for (const outcome of failures) {
+        lines.push(`**${outcome.title}**${outcome.note ? `: ${inline(outcome.note)}` : ''}`, '');
+        const log = row.logs[outcome.check];
+        if (log) {
+          lines.push(`<details><summary>Last lines of the ${outcome.title} log</summary>`, '', '<pre>', escapeHtml(log), '</pre>', '', '</details>', '');
+        }
       }
-      const log = row.logs[outcome.check];
-      if (log) {
-        lines.push('', '<details><summary>Last lines of the log</summary>', '', '<pre>', escapeHtml(log), '</pre>', '', '</details>');
+      const held = row.outcomes.filter((outcome) => ['blocked', 'not-run'].includes(outcome.status)).map((outcome) => outcome.title);
+      if (failures.length > 0 && held.length > 0) {
+        lines.push(`Not run: ${held.join(', ')}.`, '');
       }
-      lines.push('');
-    }
-    for (const row of lost) {
-      lines.push(`**${inline(row.label)}**`, '', 'The job uploaded no result. See its log.', '');
+      if (failures.length === 0) {
+        lines.push('The job uploaded no result. See its log.', '');
+      }
     }
   }
 

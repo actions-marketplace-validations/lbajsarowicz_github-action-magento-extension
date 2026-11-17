@@ -30,7 +30,9 @@ test('a failed check fails the report and later checks show as not run', () => {
   assert.deepEqual(report.rows[1].outcomes.map((outcome) => outcome.status), ['failed', 'not-run']);
   const markdown = renderMarkdown(report, 'Magento Check');
   assert.match(markdown, /1 of 2 version combinations failed/);
-  assert.match(markdown, /\*\*Magento 2\.4\.9 @ PHP 8\.5: Compile\*\*/);
+  assert.match(markdown, /### What failed\n\n#### Magento 2\.4\.9 @ PHP 8\.5\n\n\*\*Compile\*\*: Fatal error\n/);
+  assert.match(markdown, /Not run: Unit tests\./);
+  assert.equal(markdown.split('#### Magento 2.4.8-p5 @ PHP 8.4').length, 2);
   assert.match(markdown, /line &lt;b&gt;/);
 });
 
@@ -40,6 +42,7 @@ test('a combination of the matrix without a result fails the report', () => {
   ]);
   assert.equal(report.status, 'failed');
   assert.equal(report.rows[1].outcomes[0].status, 'missing');
+  assert.match(renderMarkdown(report, 'Magento Check'), /#### Magento 2\.4\.9 @ PHP 8\.5\n\nThe job uploaded no result/);
 });
 
 test('skipped checks do not fail, blocked checks do', () => {
