@@ -1,0 +1,113 @@
+name: 'Magento Extension PHPUnit'
+description: 'Runs the unit or integration tests of a Magento 2 extension with the PHPUnit version of one Magento release'
+author: 'lbajsarowicz'
+
+inputs:
+  magento-version:
+    description: 'Exact Magento Open Source release, such as `2.4.8-p5`.'
+    required: true
+  php-version:
+    description: 'PHP minor to run on, such as `8.4`.'
+    required: true
+  path:
+    description: 'Directory in the workspace that holds the extension (its `composer.json`).'
+    required: false
+    default: '.'
+  suite:
+    description: >-
+      `unit` runs `Test/Unit` and needs no services. `integration` runs `Test/Integration` with
+      Magento's integration framework and needs a MySQL or MariaDB service and an OpenSearch
+      service in the job.
+    required: false
+    default: 'unit'
+  db-host:
+    description: 'Database host for integration tests.'
+    required: false
+    default: '127.0.0.1'
+  db-port:
+    description: 'Database port for integration tests.'
+    required: false
+    default: '3306'
+  db-user:
+    description: 'Database user for integration tests.'
+    required: false
+    default: 'root'
+  db-password:
+    description: 'Database password for integration tests.'
+    required: false
+    default: ''
+  db-name:
+    description: 'Database that the integration framework installs Magento into.'
+    required: false
+    default: 'magento_integration_tests'
+  search-engine:
+    description: '`opensearch`, `elasticsearch7` or `elasticsearch8`.'
+    required: false
+    default: 'opensearch'
+  search-host:
+    description: 'Search engine host for integration tests.'
+    required: false
+    default: '127.0.0.1'
+  search-port:
+    description: 'Search engine port for integration tests.'
+    required: false
+    default: '9200'
+
+outputs:
+  status:
+    description: '`passed` or `failed`.'
+    value: ${{ steps.run.outputs.status }}
+  result-path:
+    description: 'Directory holding `results.json` and the log of every check.'
+    value: ${{ steps.run.outputs.result-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up PHP ${{ inputs.php-version }}
+      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      with:
+        php-version: ${{ inputs.php-version }}
+        extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+        coverage: none
+        tools: composer:v2
+        ini-values: memory_limit=-1
+
+    - name: Locate Composer cache
+      id: composer-cache
+      shell: bash
+      run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Composer downloads
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
+        restore-keys: |
+          magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version }}-
+
+    - name: Run tests
+      id: run
+      shell: bash
+      env:
+        MEC_PHP_VERSION: ${{ inputs.php-version }}
+        MEC_MAGENTO_VERSION: ${{ inputs.magento-version }}
+        MEC_CHECKS: ${{ inputs.suite == 'integration' && 'install,integration' || 'install,unit' }}
+        MEC_PATH: ${{ inputs.path }}
+        MEC_PHPCS_SEVERITY: ''
+        MEC_PHPCS_SCOPE: changed
+        MEC_PHPCS_CONFIG: ''
+        MEC_PHPSTAN_LEVEL: '1'
+        MEC_PHPSTAN_CONFIG: ''
+        MEC_PHPSTAN_BASELINE: ''
+        MEC_ANNOTATIONS: 'false'
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+        MEC_DB_HOST: ${{ inputs.db-host }}
+        MEC_DB_PORT: ${{ inputs.db-port }}
+        MEC_DB_USER: ${{ inputs.db-user }}
+        MEC_DB_PASSWORD: ${{ inputs.db-password }}
+        MEC_DB_NAME: ${{ inputs.db-name }}
+        MEC_SEARCH_ENGINE: ${{ inputs.search-engine }}
+        MEC_SEARCH_HOST: ${{ inputs.search-host }}
+        MEC_SEARCH_PORT: ${{ inputs.search-port }}
+      run: bash "$GITHUB_ACTION_PATH/../scripts/run.sh"

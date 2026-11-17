@@ -1,0 +1,75 @@
+name: 'Magento Extension Compile'
+description: 'Installs a Magento 2 extension into one Magento release and runs setup:di:compile and static content deployment, without a database'
+author: 'lbajsarowicz'
+
+inputs:
+  magento-version:
+    description: 'Exact Magento Open Source release, such as `2.4.8-p5`.'
+    required: true
+  php-version:
+    description: 'PHP minor to run on, such as `8.4`.'
+    required: true
+  path:
+    description: 'Directory in the workspace that holds the extension (its `composer.json`).'
+    required: false
+    default: '.'
+  static-content:
+    description: 'Also run `setup:static-content:deploy`. Set to `false` for dependency injection compilation only.'
+    required: false
+    default: 'true'
+  locales:
+    description: 'Space-separated locales to deploy static content for.'
+    required: false
+    default: 'en_US'
+
+outputs:
+  status:
+    description: '`passed` or `failed`.'
+    value: ${{ steps.run.outputs.status }}
+  result-path:
+    description: 'Directory holding `results.json` and the log of every check.'
+    value: ${{ steps.run.outputs.result-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up PHP ${{ inputs.php-version }}
+      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      with:
+        php-version: ${{ inputs.php-version }}
+        extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+        coverage: none
+        tools: composer:v2
+        ini-values: memory_limit=-1
+
+    - name: Locate Composer cache
+      id: composer-cache
+      shell: bash
+      run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Composer downloads
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
+        restore-keys: |
+          magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version }}-
+
+    - name: Compile
+      id: run
+      shell: bash
+      env:
+        MEC_PHP_VERSION: ${{ inputs.php-version }}
+        MEC_MAGENTO_VERSION: ${{ inputs.magento-version }}
+        MEC_CHECKS: ${{ inputs.static-content == 'true' && 'install,compile,static-content' || 'install,compile' }}
+        MEC_PATH: ${{ inputs.path }}
+        MEC_PHPCS_SEVERITY: ''
+        MEC_PHPCS_SCOPE: changed
+        MEC_PHPCS_CONFIG: ''
+        MEC_PHPSTAN_LEVEL: '1'
+        MEC_PHPSTAN_CONFIG: ''
+        MEC_PHPSTAN_BASELINE: ''
+        MEC_ANNOTATIONS: 'false'
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+        MEC_LOCALES: ${{ inputs.locales }}
+      run: bash "$GITHUB_ACTION_PATH/../scripts/run.sh"

@@ -190,6 +190,37 @@ check_compile() {
   note "no database; enabled: ${MODULE_NAMES}"
 }
 
+check_static_content() {
+  cd "$MAGENTO_ROOT"
+  [[ -f app/etc/config.php ]] || php bin/magento module:enable --all --no-ansi | tail -n 1
+  php "$SCRIPTS/static-content-config.php" "$MAGENTO_ROOT"
+  # shellcheck disable=SC2086
+  php -d memory_limit=-1 bin/magento setup:static-content:deploy --force --no-ansi --jobs=4 $MEC_LOCALES
+  note "no database; locales: ${MEC_LOCALES}"
+}
+
+# run_phpunit <junit file> <phpunit arguments>...
+# Sets PHPUNIT_SUMMARY and returns PHPUnit's exit code; zero executed tests is a failure.
+run_phpunit() {
+  local junit="$1" code=0; shift
+  "$MAGENTO_ROOT/vendor/bin/phpunit" "$@" --log-junit "$junit" || code=$?
+  local summary count assertions broken
+  summary="$(php -r '
+    $x = @simplexml_load_file($argv[1]);
+    $s = $x ? ($x->testsuite[0] ?? null) : null;
+    echo $s ? (int) $s["tests"] . " " . (int) $s["assertions"] . " " . ((int) $s["failures"] + (int) $s["errors"]) : "0 0 0";
+  ' "$junit")"
+  read -r count assertions broken <<< "$summary"
+  local version
+  version="$("$MAGENTO_ROOT/vendor/bin/phpunit" --version | grep -oE 'PHPUnit [0-9.]+' | head -1)"
+  PHPUNIT_SUMMARY="${version} (from Magento ${MEC_MAGENTO_VERSION}); ${count} tests, ${assertions} assertions, ${broken} failing"
+  if [[ "$count" -eq 0 ]]; then
+    PHPUNIT_SUMMARY="${version}: no tests were run"
+    return 1
+  fi
+  return "$code"
+}
+
 check_unit() {
   local directories
   directories="$(find "$EXT" -maxdepth 6 -type d -path '*/Test/Unit' -not -path '*/vendor/*' | sort)"
@@ -211,22 +242,31 @@ check_unit() {
     echo '    </php>'
     echo '</phpunit>'
   } > "$config"
-  local junit="$RESULTS/unit.junit.xml" code=0
-  vendor/bin/phpunit --version
-  vendor/bin/phpunit -c "$config" --log-junit "$junit" || code=$?
-  local summary
-  summary="$(php -r '
-    $x = @simplexml_load_file($argv[1]);
-    $s = $x ? ($x->testsuite[0] ?? null) : null;
-    echo $s ? (int) $s["tests"] . " " . (int) $s["assertions"] . " " . ((int) $s["failures"] + (int) $s["errors"]) : "0 0 0";
-  ' "$junit")"
-  local count assertions broken
-  read -r count assertions broken <<< "$summary"
-  if [[ "$count" -eq 0 ]]; then
-    note "PHPUnit ran no tests from Test/Unit"
-    return 1
+  local code=0
+  run_phpunit "$RESULTS/unit.junit.xml" -c "$config" || code=$?
+  note "$PHPUNIT_SUMMARY"
+  return "$code"
+}
+
+check_integration() {
+  local directories
+  directories="$(find "$EXT" -maxdepth 6 -type d -path '*/Test/Integration' -not -path '*/vendor/*' | sort)"
+  [[ -n "$directories" ]] || { note "no Test/Integration directory"; return "$SKIPPED"; }
+  if command -v mysql > /dev/null; then
+    # Magento creates triggers during installation, which MySQL refuses with binary logging on.
+    MYSQL_PWD="$MEC_DB_PASSWORD" mysql --protocol=tcp -h "$MEC_DB_HOST" -P "$MEC_DB_PORT" -u "$MEC_DB_USER" \
+      -e "SET GLOBAL log_bin_trust_function_creators = 1; CREATE DATABASE IF NOT EXISTS \`${MEC_DB_NAME}\`;" \
+      || { note "database at ${MEC_DB_HOST}:${MEC_DB_PORT} is not reachable; the job needs a MySQL or MariaDB service"; return 1; }
   fi
-  note "$(vendor/bin/phpunit --version | grep -oE 'PHPUnit [0-9.]+' | head -1) (from Magento ${MEC_MAGENTO_VERSION}); ${count} tests, ${assertions} assertions, ${broken} failing"
+  curl -fsS --max-time 10 "http://${MEC_SEARCH_HOST}:${MEC_SEARCH_PORT}" > /dev/null \
+    || { note "search engine at ${MEC_SEARCH_HOST}:${MEC_SEARCH_PORT} is not reachable; the job needs an OpenSearch service"; return 1; }
+  local config="$MAGENTO_ROOT/dev/tests/integration/phpunit.extension-check.xml"
+  # shellcheck disable=SC2086
+  php "$SCRIPTS/integration-config.php" "$MAGENTO_ROOT" "$config" $directories
+  cd "$MAGENTO_ROOT/dev/tests/integration"
+  local code=0
+  run_phpunit "$RESULTS/integration.junit.xml" -c "$config" || code=$?
+  note "$PHPUNIT_SUMMARY"
   return "$code"
 }
 

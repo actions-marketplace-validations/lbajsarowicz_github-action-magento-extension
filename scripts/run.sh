@@ -4,8 +4,8 @@ set -uo pipefail
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIRROR="https://mirror.mage-os.org/"
 # phpcs runs after install so it can use the coding standard that the Magento release resolves.
-ALL_CHECKS="validate lint install phpcs compile unit phpstan"
-MAGENTO_CHECKS="install compile unit phpstan"
+ALL_CHECKS="validate lint install phpcs compile static-content unit integration phpstan"
+MAGENTO_CHECKS="install compile static-content unit integration phpstan"
 SKIPPED=78
 
 fail_config() {
@@ -38,7 +38,7 @@ contains() { [[ " $1 " == *" $2 "* ]]; }
 
 requested="${MEC_CHECKS//,/ }"
 if [[ "$(echo "$requested" | xargs)" == "default" ]]; then
-  if [[ -n "$MEC_MAGENTO_VERSION" ]]; then requested="$ALL_CHECKS"; else requested="validate lint phpcs"; fi
+  if [[ -n "$MEC_MAGENTO_VERSION" ]]; then requested="validate lint install phpcs compile unit phpstan"; else requested="validate lint phpcs"; fi
 fi
 selected=""
 for check in $requested; do
@@ -63,11 +63,18 @@ MODULE_NAMES="$(find "$EXT" -maxdepth 5 -type f -path '*/etc/module.xml' -not -p
 MODULE_NAMES="${MODULE_NAMES% }"
 export EXT_NAME MODULE_NAMES
 
+: "${MEC_LOCALES:=en_US}" "${MEC_DB_HOST:=127.0.0.1}" "${MEC_DB_PORT:=3306}" "${MEC_DB_USER:=root}" "${MEC_DB_PASSWORD:=}"
+: "${MEC_DB_NAME:=magento_integration_tests}" "${MEC_SEARCH_ENGINE:=opensearch}" "${MEC_SEARCH_HOST:=127.0.0.1}" "${MEC_SEARCH_PORT:=9200}"
+[[ "$MEC_LOCALES" =~ ^[A-Za-z_]+(\ [A-Za-z_]+)*$ ]] || fail_config "locales must be a space-separated list such as 'en_US de_DE'."
+[[ "$MEC_DB_NAME" =~ ^[A-Za-z0-9_]+$ && "$MEC_DB_PORT" =~ ^[0-9]+$ && "$MEC_SEARCH_PORT" =~ ^[0-9]+$ ]] || fail_config "database name or ports are not valid."
+[[ "$MEC_SEARCH_ENGINE" =~ ^(opensearch|elasticsearch7|elasticsearch8)$ ]] || fail_config "search-engine must be opensearch, elasticsearch7 or elasticsearch8."
+export MEC_DB_HOST MEC_DB_PORT MEC_DB_USER MEC_DB_PASSWORD MEC_DB_NAME MEC_SEARCH_ENGINE MEC_SEARCH_HOST MEC_SEARCH_PORT
+
 # shellcheck source=checks.sh
 source "$SCRIPTS/checks.sh"
 
 label="PHP ${MEC_PHP_VERSION}"
-[[ -n "$MEC_MAGENTO_VERSION" ]] && label="Magento ${MEC_MAGENTO_VERSION} / PHP ${MEC_PHP_VERSION}"
+[[ -n "$MEC_MAGENTO_VERSION" ]] && label="Magento ${MEC_MAGENTO_VERSION} @ PHP ${MEC_PHP_VERSION}"
 install_status=""
 overall="passed"
 failures=()
@@ -78,7 +85,7 @@ for check in $ordered; do
   note_file="$RESULTS/${check}.note"
   : > "$note_file"
   started="$(date +%s)"
-  if contains "compile unit phpstan" "$check" && [[ "$install_status" != "passed" ]]; then
+  if contains "compile static-content unit integration phpstan" "$check" && [[ "$install_status" != "passed" ]]; then
     status="blocked"
     echo "install did not pass" > "$note_file"
   else
@@ -86,7 +93,7 @@ for check in $ordered; do
     # Output of the extension's own code must not be able to issue workflow commands.
     token="mec-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
     echo "::stop-commands::${token}"
-    ( set -e; export NOTE_FILE="$note_file"; "check_${check}" ) 2>&1 | tee "$log"
+    ( set -e; export NOTE_FILE="$note_file"; "check_${check//-/_}" ) 2>&1 | tee "$log"
     code="${PIPESTATUS[0]}"
     echo "::${token}::"
     echo "::endgroup::"
