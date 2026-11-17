@@ -1,6 +1,6 @@
 'use strict';
 
-const ICONS = { passed: '✅', failed: '❌', skipped: '➖', blocked: '⛔' };
+const ICONS = { passed: '✅', failed: '❌', warning: '⚠️', skipped: '➖', blocked: '⛔' };
 
 function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

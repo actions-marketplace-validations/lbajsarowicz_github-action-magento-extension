@@ -14,6 +14,7 @@ const CHECKS = [
 const ICONS = {
   passed: '✅',
   failed: '❌',
+  warning: '⚠️',
   skipped: '➖',
   blocked: '⛔',
   'not-run': '⚪',
@@ -106,7 +107,7 @@ function renderMarkdown(report, title) {
       lines.push(`| ${inline(row.label)} | ${row.outcomes.map((outcome) => ICONS[outcome.status] || '').join(' | ')} |`);
     }
   }
-  lines.push('', '✅ passed · ❌ failed · ➖ nothing to run · ⛔ blocked by a failed install · ⚪ not run · ❔ no result', '');
+  lines.push('', '✅ passed · ❌ failed · ⚠️ passed with a warning · ➖ nothing to run · ⛔ blocked by a failed install · ⚪ not run · ❔ no result', '');
 
   const troubled = rows.filter((row) => row.failed);
   if (troubled.length > 0) {
@@ -119,6 +120,7 @@ function renderMarkdown(report, title) {
         continue;
       }
       const held = row.outcomes.filter((outcome) => ['blocked', 'not-run'].includes(outcome.status));
+      const warned = row.outcomes.filter((outcome) => outcome.status === 'warning');
       const passed = row.outcomes.filter((outcome) => outcome.status === 'passed');
       const skipped = row.outcomes.filter((outcome) => outcome.status === 'skipped');
       lines.push('| | Check | What happened |', '|:---:|---|---|');
@@ -127,6 +129,9 @@ function renderMarkdown(report, title) {
       }
       for (const outcome of held) {
         lines.push(`| ${ICONS[outcome.status]} | ${outcome.title} | ${outcome.status === 'blocked' ? 'Blocked by the failed install.' : 'Not run.'} |`);
+      }
+      for (const outcome of warned) {
+        lines.push(`| ${ICONS.warning} | ${outcome.title} | ${inline(outcome.note)} |`);
       }
       if (skipped.length > 0) {
         lines.push(`| ${ICONS.skipped} | ${skipped.map((outcome) => outcome.title).join(', ')} | Nothing to run. |`);

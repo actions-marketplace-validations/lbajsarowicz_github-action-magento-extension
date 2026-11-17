@@ -58,7 +58,7 @@ For every supported release and PHP version at once, with one result table per p
 | `unit` | PHPUnit shipped with that release, on `Test/Unit` | yes |
 | `phpstan` | PHPStan with the repository's configuration, or a default that loads `bitexpert/phpstan-magento` | yes |
 
-A check with nothing to run is reported as `skipped`. `compile`, `unit` and `phpstan` are `blocked` when `install` fails.
+A check with nothing to run is reported as `skipped`. When `Test/Unit` or `Test/Integration` exists but PHPUnit runs no test from it, the check is reported as `warning`, which does not fail the step. `compile`, `unit` and `phpstan` are `blocked` when `install` fails.
 
 ## Actions in this repository
 
@@ -259,6 +259,7 @@ jobs:
 |---|---|
 | ✅ | passed |
 | ❌ | failed; the reason and the end of the log are below the table |
+| ⚠️ | passed with a warning, such as a `Test/Unit` directory from which PHPUnit ran no test |
 | ➖ | nothing to run, such as no `Test/Unit` directory |
 | ⛔ | blocked by a failed install |
 | ⚪ | not run because an earlier check failed |
