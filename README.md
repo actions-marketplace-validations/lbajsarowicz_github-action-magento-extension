@@ -217,6 +217,7 @@ jobs:
 |---|---|
 | ✅ | passed |
 | ❌ | failed; the reason and the end of the log are below the table |
+| ⚠️ | passed with a warning, such as a `Test/Unit` directory from which PHPUnit ran no test |
 | ➖ | nothing to run, such as no `Test/Unit` directory |
 | ⛔ | blocked by a failed install |
 | ⚪ | not run because an earlier check failed |
