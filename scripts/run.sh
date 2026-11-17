@@ -29,8 +29,17 @@ WORK="$MEC_WORK_DIR"
 RESULTS="$WORK/results"
 MAGENTO_ROOT="$WORK/magento"
 TOOLS="$WORK/tools"
-rm -rf "$MAGENTO_ROOT" "$TOOLS" "$RESULTS"
+mkdir -p "$WORK"
+# Steps of one job share the Magento install and the results. Anything else is discarded.
+state="${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}-${GITHUB_JOB:-job} php${MEC_PHP_VERSION} ${EXT}"
+installed_version="$(cut -d' ' -f1 "$WORK/install-state" 2>/dev/null || true)"
+if [[ "$(cat "$WORK/state" 2>/dev/null || true)" != "$state" ]] \
+  || [[ -n "$MEC_MAGENTO_VERSION" && -n "$installed_version" && "$installed_version" != "$MEC_MAGENTO_VERSION" ]]; then
+  rm -rf "$MAGENTO_ROOT" "$TOOLS" "$RESULTS" "$WORK/install-state"
+  printf '%s' "$state" > "$WORK/state"
+fi
 mkdir -p "$RESULTS"
+touch "$RESULTS/results.tsv"
 export EXT WORK RESULTS MAGENTO_ROOT TOOLS MIRROR SCRIPTS
 export COMPOSER_NO_INTERACTION=1 COMPOSER_MEMORY_LIMIT=-1
 
@@ -80,9 +89,13 @@ label="PHP ${MEC_PHP_VERSION}"
 install_status=""
 overall="passed"
 failures=()
-: > "$RESULTS/results.tsv"
+ran=""
 
 for check in $ordered; do
+  if [[ "$check" == "install" && -f "$WORK/install-state" ]]; then
+    install_status="$(cut -d' ' -f2 "$WORK/install-state")"
+    continue
+  fi
   log="$RESULTS/${check}.log"
   note_file="$RESULTS/${check}.note"
   : > "$note_file"
@@ -108,10 +121,16 @@ for check in $ordered; do
       *) status="failed" ;;
     esac
   fi
-  [[ "$check" == "install" ]] && install_status="$status"
+  if [[ "$check" == "install" ]]; then
+    install_status="$status"
+    printf '%s %s' "$MEC_MAGENTO_VERSION" "$status" > "$WORK/install-state"
+  fi
   seconds=$(( $(date +%s) - started ))
   note="$(head -c 300 "$note_file" | tr '\t\n' '  ')"
-  printf '%s\t%s\t%s\t%s\n' "$check" "$status" "$seconds" "$note" >> "$RESULTS/results.tsv"
+  { grep -v "^${check}"$'\t' "$RESULTS/results.tsv" || true; } > "$RESULTS/results.tsv.next"
+  printf '%s\t%s\t%s\t%s\n' "$check" "$status" "$seconds" "$note" >> "$RESULTS/results.tsv.next"
+  mv "$RESULTS/results.tsv.next" "$RESULTS/results.tsv"
+  ran="$ran $check"
   if [[ "$status" == "failed" || "$status" == "blocked" ]]; then
     overall="failed"
     failures+=("::error title=${label}: ${check} ${status}::${note:-See the '${check}' group in the log.}")
@@ -120,7 +139,9 @@ done
 # Printed last: inline findings come first in GitHub's limit of 10 errors per step.
 for failure in "${failures[@]}"; do echo "$failure"; done
 
-php "$SCRIPTS/report.php" "$RESULTS" "$label" "$overall" "$MEC_PHP_VERSION" "$MEC_MAGENTO_VERSION" "$EXT_NAME" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
+[[ "${MAGENTO_EXTENSION_CHECK_SUMMARY:-true}" == "false" ]] && summary=/dev/null
+php "$SCRIPTS/report.php" "$RESULTS" "$label" "$overall" "$MEC_PHP_VERSION" "$MEC_MAGENTO_VERSION" "$EXT_NAME" "$ran" >> "$summary"
 
 {
   echo "status=${overall}"

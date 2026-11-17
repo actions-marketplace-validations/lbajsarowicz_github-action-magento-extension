@@ -1,0 +1,31 @@
+name: 'Magento Extension Check Report'
+description: 'Combines the results of every Magento and PHP combination into one table and fails when any of them failed'
+author: 'lbajsarowicz'
+
+inputs:
+  path:
+    description: 'Directory that holds the downloaded result artifacts of the check jobs.'
+    required: false
+    default: 'magento-check-results'
+  matrix:
+    description: >-
+      The `matrix` output of `lbajsarowicz/github-action-magento-matrix`. A combination listed
+      there without a result is reported and fails the report.
+    required: false
+    default: ''
+  title:
+    description: 'Heading of the report.'
+    required: false
+    default: 'Magento Check'
+
+outputs:
+  status:
+    description: '`passed` or `failed`.'
+
+runs:
+  using: 'node24'
+  main: 'index.js'
+
+branding:
+  icon: 'grid'
+  color: 'orange'

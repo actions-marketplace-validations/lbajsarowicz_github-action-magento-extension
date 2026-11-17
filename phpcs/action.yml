@@ -52,7 +52,18 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Detect an already prepared job
+      id: prepared
+      shell: bash
+      env:
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+        MEC_PHP_VERSION: ${{ inputs.php-version }}
+        MEC_PROFILE: magento
+        MEC_CACHE_ID: magento${{ inputs.magento-version }}
+      run: bash "$GITHUB_ACTION_PATH/../scripts/prepare.sh"
+
     - name: Set up PHP ${{ inputs.php-version }}
+      if: ${{ steps.prepared.outputs.php != 'true' }}
       uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
       with:
         php-version: ${{ inputs.php-version }}
@@ -62,11 +73,13 @@ runs:
         ini-values: memory_limit=-1
 
     - name: Locate Composer cache
+      if: ${{ steps.prepared.outputs.cache != 'true' }}
       id: composer-cache
       shell: bash
       run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
 
     - name: Cache Composer downloads
+      if: ${{ steps.prepared.outputs.cache != 'true' }}
       uses: actions/cache@v6
       with:
         path: ${{ steps.composer-cache.outputs.dir }}

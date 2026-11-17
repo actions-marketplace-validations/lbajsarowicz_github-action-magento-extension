@@ -28,3 +28,8 @@ jobs:
         run: |
           set -euo pipefail
           for file in scripts/*.php; do php -l "$file"; done
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Report tests
+        run: node --test report/test/*.test.js

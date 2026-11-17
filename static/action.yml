@@ -3,6 +3,12 @@ description: 'Checks a Magento 2 extension on one PHP version without installing
 author: 'lbajsarowicz'
 
 inputs:
+  magento-version:
+    description: >-
+      Only labels the result. Set it when the static checks are a step of a job that goes on to
+      check one Magento release, so that the report lists them under that release.
+    required: false
+    default: ''
   php-version:
     description: 'PHP minor to run the checks on, such as `8.4`.'
     required: true
@@ -67,7 +73,18 @@ runs:
           esac
         done
 
+    - name: Detect an already prepared job
+      id: prepared
+      shell: bash
+      env:
+        MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
+        MEC_PHP_VERSION: ${{ inputs.php-version }}
+        MEC_PROFILE: static
+        MEC_CACHE_ID: static
+      run: bash "$GITHUB_ACTION_PATH/../scripts/prepare.sh"
+
     - name: Set up PHP ${{ inputs.php-version }}
+      if: ${{ steps.prepared.outputs.php != 'true' }}
       uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
       with:
         php-version: ${{ inputs.php-version }}
@@ -77,11 +94,13 @@ runs:
         ini-values: memory_limit=-1
 
     - name: Locate Composer cache
+      if: ${{ steps.prepared.outputs.cache != 'true' }}
       id: composer-cache
       shell: bash
       run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
 
     - name: Cache Composer downloads
+      if: ${{ steps.prepared.outputs.cache != 'true' }}
       uses: actions/cache@v6
       with:
         path: ${{ steps.composer-cache.outputs.dir }}
@@ -106,7 +125,7 @@ runs:
       shell: bash
       env:
         MEC_PHP_VERSION: ${{ inputs.php-version }}
-        MEC_MAGENTO_VERSION: ''
+        MEC_MAGENTO_VERSION: ${{ inputs.magento-version }}
         MEC_CHECKS: ${{ inputs.checks }}
         MEC_PATH: ${{ inputs.path }}
         MEC_PHPCS_SEVERITY: ${{ inputs.phpcs-severity }}
