@@ -1,5 +1,5 @@
 name: 'Magento Extension Check'
-description: 'Checks a Magento 2 extension against one Magento release and PHP version: coding standard, install, DI compile, unit tests, PHPStan'
+description: 'Check a Magento 2 extension against a Magento release and PHP version: PHPCS, install, DI compile, PHPUnit, PHPStan'
 author: 'lbajsarowicz'
 
 inputs:
