@@ -18,16 +18,24 @@ Status: proof of concept.
 
 A check with nothing to run is reported as `skipped`. `compile`, `unit` and `phpstan` are `blocked` when `install` fails.
 
-## Two actions in this repository
+## Actions in this repository
 
-| Reference | Runs | Needs Magento |
+One action per kind of check, so every job in the pull request says what it does.
+
+| Reference | Runs | Needs |
 |---|---|---|
-| `lbajsarowicz/github-action-magento-extension/static` | `validate`, `lint`, `phpcs` on one PHP version | no |
-| `lbajsarowicz/github-action-magento-extension` | `install`, `compile`, `unit`, `phpstan` (and the static checks when asked) on one Magento release and PHP version | yes |
+| `lbajsarowicz/github-action-magento-extension/static` | `composer validate`, module metadata, PHP syntax | PHP only |
+| `lbajsarowicz/github-action-magento-extension/phpcs` | Coding standard on changed files | Magento release |
+| `lbajsarowicz/github-action-magento-extension/phpstan` | Static analysis | Magento release |
+| `lbajsarowicz/github-action-magento-extension/compile` | `setup:di:compile` and `setup:static-content:deploy`, without a database | Magento release |
+| `lbajsarowicz/github-action-magento-extension/phpunit` | Unit tests (`suite: unit`) or integration tests (`suite: integration`) | Magento release; integration also MariaDB/MySQL and OpenSearch services |
+| `lbajsarowicz/github-action-magento-extension` | Several of the above in one job (`checks` input) | Magento release |
+
+Each action that needs a Magento release installs it first and proves the installed module is your checkout.
 
 ## Usage
 
-The matrix action supplies both lists: every distinct PHP version for the static checks, and every Magento and PHP combination for the rest.
+The matrix action supplies every distinct PHP version for the static checks and every Magento and PHP combination for the rest. Job names follow the pattern `Compile: Magento 2.4.9 @ PHP 8.5`.
 
 ```yaml
 name: Magento Check
@@ -38,6 +46,7 @@ on:
 permissions: {}
 jobs:
   matrix:
+    name: Version matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -49,6 +58,7 @@ jobs:
         uses: lbajsarowicz/github-action-magento-matrix@v0
 
   static:
+    name: "Static checks @ PHP ${{ matrix.php }}"
     needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -58,7 +68,6 @@ jobs:
       fail-fast: false
       matrix:
         php: ${{ fromJSON(needs.matrix.outputs.php) }}
-    name: Static checks / PHP ${{ matrix.php }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -68,7 +77,8 @@ jobs:
           php-version: ${{ matrix.php }}
           checks: validate,lint
 
-  magento:
+  compile:
+    name: "Compile: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
     needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -77,20 +87,86 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
-    name: Magento ${{ matrix.magento }} / PHP ${{ matrix.php }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: lbajsarowicz/github-action-magento-extension@v0
+      - uses: lbajsarowicz/github-action-magento-extension/compile@v0
         with:
           magento-version: ${{ matrix.magento }}
           php-version: ${{ matrix.php }}
-          checks: install,phpcs,compile,unit,phpstan
-          annotations: ${{ strategy.job-index == 0 }}
+
+  unit:
+    name: "Unit tests: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
+        with:
+          magento-version: ${{ matrix.magento }}
+          php-version: ${{ matrix.php }}
+          suite: unit
+```
+
+`phpcs` and `phpstan` jobs have the same shape with `annotations: ${{ strategy.job-index == 0 }}` added. An integration job adds two service containers, whose versions also come from the matrix:
+
+```yaml
+  integration:
+    name: "Integration tests: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    services:
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: magento
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+      opensearch:
+        image: opensearchproject/opensearch:${{ matrix.opensearch }}
+        env:
+          discovery.type: single-node
+          DISABLE_SECURITY_PLUGIN: 'true'
+          DISABLE_INSTALL_DEMO_CONFIG: 'true'
+          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -fs http://localhost:9200/_cluster/health"
+          --health-interval 10s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
+        with:
+          magento-version: ${{ matrix.magento }}
+          php-version: ${{ matrix.php }}
+          suite: integration
+          db-password: magento
 ```
 
 ## Inputs
+
+These are the inputs of the root action. Each sub-action takes the subset that applies to it, with shorter names where there is no ambiguity (`config`, `severity`, `scope`, `level`, `baseline`); see its `action.yml`.
 
 The static action takes `php-version`, `checks`, `path`, `phpcs-config`, `phpcs-severity`, `phpcs-scope`, `annotations` and `github-token` with the same meaning.
 
@@ -166,7 +242,8 @@ annotations: ${{ strategy.job-index == 0 }}
 - The release's own development dependencies are installed together with the extension, in one dependency graph.
 - Composer's block on packages with published advisories is switched off inside the temporary Magento project, because older release lines would not resolve otherwise.
 - The extension's own `phpunit.xml`, `require-dev` and `autoload-dev` are not honoured yet.
-- No integration tests, no pull-request comment.
+- Every job installs Magento again, which costs 30 to 45 seconds per job.
+- No pull-request comment.
 
 ## Releases
 
