@@ -31,7 +31,7 @@ async function runPhpunit(ctx, name, args, cwd) {
   const { config } = ctx;
   const binary = path.join(config.magentoRoot, 'vendor', 'bin', 'phpunit');
   const junit = path.join(config.results, `${name}.junit.xml`);
-  const run = await ctx.sh.exec(binary, [...args, '--log-junit', junit, ...(config.testdox ? ['--testdox'] : [])], { cwd, allowFailure: true });
+  const run = await ctx.sh.exec('php', ['-d', 'memory_limit=-1', binary, ...args, '--log-junit', junit, ...(config.testdox ? ['--testdox'] : [])], { cwd, allowFailure: true });
   let xml = '';
   try {
     xml = fs.readFileSync(junit, 'utf8');

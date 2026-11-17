@@ -11,6 +11,7 @@ const { junitTotals, phpcsTotals, phpstanTotals, firstVersion } = require('../sr
 const { findingsFromReport, annotationLines } = require('../src/annotations');
 const { changedFiles } = require('../src/changed-files');
 const { recordCheck, overallStatus } = require('../src/results');
+const { mirrorDirectory, differences } = require('../src/copy');
 const { unitConfiguration } = require('../src/checks/phpunit');
 const { defaultConfiguration } = require('../src/checks/phpstan');
 const { resolveToolConfig } = require('../src/checks/tool-config');
@@ -162,6 +163,26 @@ test('changed files of a pull request and of a push', async () => {
   assert.equal(await changedFiles({ ...base, event: { before: '0'.repeat(40), after: 'b'.repeat(40) }, request: request([]) }), null);
   assert.equal(await changedFiles({ ...base, event: { pull_request: { number: 7 } }, request: async () => ({ ok: false }) }), null);
   assert.equal(await changedFiles({ ...base, repository: 'not a repo', event: {}, request: request([]) }), null);
+});
+
+test('the installed copy is made identical to the checkout, except .git and vendor', () => {
+  const { root, extension } = workspace({ '.git/HEAD': 'ref', 'vendor/dep/a.php': '<?php', 'Test/Unit/DemoTest.php': '<?php', 'sub/.git/x': 'y' });
+  const installed = path.join(root, 'installed');
+  fs.mkdirSync(path.join(installed, 'vendor/kept'), { recursive: true });
+  fs.writeFileSync(path.join(installed, 'stale.php'), '<?php');
+  fs.writeFileSync(path.join(installed, 'registration.php'), 'old');
+
+  assert.deepEqual(differences(extension, installed, 2), ['Model/Demo.php: only in the checkout', 'Test/Unit/DemoTest.php: only in the checkout']);
+  mirrorDirectory(extension, installed);
+  assert.deepEqual(differences(extension, installed), []);
+  assert.ok(fs.existsSync(path.join(installed, 'Test/Unit/DemoTest.php')));
+  assert.ok(fs.existsSync(path.join(installed, 'vendor/kept')));
+  for (const absent of ['stale.php', '.git', 'vendor/dep', 'sub/.git']) {
+    assert.equal(fs.existsSync(path.join(installed, absent)), false, absent);
+  }
+  fs.writeFileSync(path.join(installed, 'registration.php'), 'changed');
+  fs.writeFileSync(path.join(installed, 'extra.php'), '');
+  assert.deepEqual(differences(extension, installed), ['extra.php: only in the installed copy', 'registration.php: differs']);
 });
 
 test('results keep one row per check and fail on failed or blocked', () => {

@@ -45,6 +45,14 @@ for (const [name, override, message] of [
   });
 }
 
+test('php-version is checked against the PHP of the job, and taken from it when empty', () => {
+  const { env } = workspace();
+  assert.equal(readConfig(env, { phpRuntime: '8.4.12' }).phpVersion, '8.4');
+  assert.equal(readConfig({ ...env, MEC_PHP_VERSION: '' }, { phpRuntime: '8.3.30' }).phpVersion, '8.3');
+  assert.throws(() => readConfig(env, { phpRuntime: '8.3.30' }), /php-version is 8\.4, but the job has PHP 8\.3\.30/);
+  assert.throws(() => readConfig({ ...env, MEC_PHP_VERSION: '' }), /php-version must be a minor/);
+});
+
 test('refuses a package without a valid name or composer.json', () => {
   assert.throws(() => readConfig(workspace({ 'composer.json': '{"name": "Not Valid"}' }).env), /valid package name/);
   assert.throws(() => readConfig(workspace({ 'composer.json': null }).env), /No composer.json/);

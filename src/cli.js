@@ -16,16 +16,32 @@ function output(values) {
   }
 }
 
+/**
+ * The actions do not install PHP or Composer; the job provides them.
+ */
+function toolVersion(command, args, name) {
+  try {
+    return execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    throw new ConfigError(`${name} is not on the PATH. Set it up before this action; see "Setting up PHP" in the README.`);
+  }
+}
+
 function job(env) {
   return `${env.GITHUB_RUN_ID || '0'}-${env.GITHUB_RUN_ATTEMPT || '0'}-${env.GITHUB_JOB || 'job'}`;
 }
 
 const commands = {
   async run() {
-    const config = readConfig(process.env);
+    const phpRuntime = toolVersion('php', ['-r', 'echo PHP_VERSION;'], 'PHP');
+    const composer = toolVersion('composer', ['--version', '--no-ansi'], 'Composer');
+    if (!/^Composer version 2\./m.test(composer)) {
+      throw new ConfigError(`Composer 2 is needed, found: ${composer.split('\n')[0]}`);
+    }
+    const config = readConfig(process.env, { phpRuntime });
     process.env.COMPOSER_NO_INTERACTION = '1';
     process.env.COMPOSER_MEMORY_LIMIT = '-1';
-    const phpRuntime = execFileSync('php', ['-r', 'echo PHP_VERSION;'], { encoding: 'utf8' });
+    process.env.COMPOSER_ALLOW_SUPERUSER = '1';
     const result = await runChecks(config, require('./checks'), { phpRuntime });
     writeStepSummary(config, result, process.env.GITHUB_STEP_SUMMARY);
     output({ status: result.status, 'result-path': config.results });
@@ -34,14 +50,10 @@ const commands = {
 
   async prepare() {
     const env = process.env;
-    const prepared = detectPrepared({
-      work: env.MEC_WORK_DIR,
-      job: job(env),
-      phpVersion: env.MEC_PHP_VERSION,
-      profile: env.MEC_PROFILE,
-      cacheId: env.MEC_CACHE_ID,
-    });
-    output(prepared);
+    const phpRuntime = toolVersion('php', ['-r', 'echo PHP_VERSION;'], 'PHP');
+    toolVersion('composer', ['--version', '--no-ansi'], 'Composer');
+    const prepared = detectPrepared({ work: env.MEC_WORK_DIR, job: job(env), cacheId: env.MEC_CACHE_ID });
+    output({ ...prepared, 'php-version': phpRuntime.split('.').slice(0, 2).join('.') });
     return 0;
   },
 

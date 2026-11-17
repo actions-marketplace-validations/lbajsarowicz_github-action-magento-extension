@@ -10,8 +10,11 @@ inputs:
     required: false
     default: ''
   php-version:
-    description: 'PHP minor to run the checks on, such as `8.4`.'
-    required: true
+    description: >-
+      PHP minor that the job is expected to provide, such as `8.4`. The action fails when the PHP
+      on the PATH is another version. Empty accepts whatever PHP the job has.
+    required: false
+    default: ''
   checks:
     description: 'Comma-separated list of checks to run. Available: `validate`, `lint`, `phpcs`.'
     required: false
@@ -85,20 +88,8 @@ runs:
       shell: bash
       env:
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
-        MEC_PHP_VERSION: ${{ inputs.php-version }}
-        MEC_PROFILE: static
         MEC_CACHE_ID: static
       run: node "$GITHUB_ACTION_PATH/../src/cli.js" prepare
-
-    - name: Set up PHP ${{ inputs.php-version }}
-      if: ${{ steps.prepared.outputs.php != 'true' }}
-      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-      with:
-        php-version: ${{ inputs.php-version }}
-        extensions: ctype, curl, dom, iconv, intl, mbstring, simplexml, tokenizer, xmlwriter, zip
-        coverage: none
-        tools: composer:v2
-        ini-values: memory_limit=-1
 
     - name: Locate Composer cache
       if: ${{ steps.prepared.outputs.cache != 'true' }}
@@ -111,9 +102,9 @@ runs:
       uses: actions/cache@v6
       with:
         path: ${{ steps.composer-cache.outputs.dir }}
-        key: magento-extension-check-static-${{ runner.os }}-php${{ inputs.php-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
+        key: magento-extension-check-static-${{ runner.os }}-php${{ steps.prepared.outputs.php-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
         restore-keys: |
-          magento-extension-check-static-${{ runner.os }}-php${{ inputs.php-version }}-
+          magento-extension-check-static-${{ runner.os }}-php${{ steps.prepared.outputs.php-version }}-
 
     - name: List changed files
       if: ${{ inputs.phpcs-scope == 'changed' || inputs.annotations == 'true' }}

@@ -7,8 +7,11 @@ inputs:
     description: 'Exact Magento Open Source release, such as `2.4.8-p5`.'
     required: true
   php-version:
-    description: 'PHP minor to run on, such as `8.4`.'
-    required: true
+    description: >-
+      PHP minor that the job is expected to provide, such as `8.4`. The action fails when the PHP
+      on the PATH is another version. Empty accepts whatever PHP the job has.
+    required: false
+    default: ''
   path:
     description: 'Directory in the workspace that holds the extension (its `composer.json`).'
     required: false
@@ -64,20 +67,8 @@ runs:
       shell: bash
       env:
         MEC_WORK_DIR: ${{ runner.temp }}/magento-extension-check
-        MEC_PHP_VERSION: ${{ inputs.php-version }}
-        MEC_PROFILE: magento
         MEC_CACHE_ID: magento${{ inputs.magento-version }}
       run: node "$GITHUB_ACTION_PATH/../src/cli.js" prepare
-
-    - name: Set up PHP ${{ inputs.php-version }}
-      if: ${{ steps.prepared.outputs.php != 'true' }}
-      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-      with:
-        php-version: ${{ inputs.php-version }}
-        extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
-        coverage: none
-        tools: composer:v2
-        ini-values: memory_limit=-1
 
     - name: Locate Composer cache
       if: ${{ steps.prepared.outputs.cache != 'true' }}
@@ -90,9 +81,9 @@ runs:
       uses: actions/cache@v6
       with:
         path: ${{ steps.composer-cache.outputs.dir }}
-        key: magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
+        key: magento-extension-check-${{ runner.os }}-php${{ steps.prepared.outputs.php-version }}-magento${{ inputs.magento-version }}-${{ hashFiles(format('{0}/composer.json', inputs.path)) }}
         restore-keys: |
-          magento-extension-check-${{ runner.os }}-php${{ inputs.php-version }}-magento${{ inputs.magento-version }}-
+          magento-extension-check-${{ runner.os }}-php${{ steps.prepared.outputs.php-version }}-magento${{ inputs.magento-version }}-
 
     - name: List changed files
       shell: bash

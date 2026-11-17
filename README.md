@@ -20,7 +20,7 @@ A check with nothing to run is reported as `skipped`. `compile`, `unit` and `php
 
 ## Actions in this repository
 
-One action per kind of check, so every job in the pull request says what it does.
+One action per kind of check, so every step or job says what it does. None of them installs PHP; see Setting up PHP.
 
 | Reference | Runs | Needs |
 |---|---|---|
@@ -37,15 +37,23 @@ Each action that needs a Magento release installs it first and proves the instal
 
 ## Usage
 
-The matrix action supplies every distinct PHP version for the static checks and every Magento and PHP combination for the rest. Job names follow the pattern `Compile: Magento 2.4.9 @ PHP 8.5`.
+One job per Magento and PHP combination. The pull request shows one row per combination and a `Result` row with a table of every check. This is the workflow of a module with integration tests; without them, drop `services` and the `Integration tests` step.
 
 ```yaml
 name: Magento Check
+
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
 permissions: {}
+
+concurrency:
+  group: magento-check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   matrix:
     name: Version matrix
@@ -54,130 +62,9 @@ jobs:
     permissions: {}
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
-      php: ${{ steps.matrix.outputs.php }}
     steps:
       - id: matrix
         uses: lbajsarowicz/github-action-magento-matrix@v0
-
-  static:
-    name: "Static checks @ PHP ${{ matrix.php }}"
-    needs: matrix
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        php: ${{ fromJSON(needs.matrix.outputs.php) }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: lbajsarowicz/github-action-magento-extension/static@v0
-        with:
-          php-version: ${{ matrix.php }}
-          checks: validate,lint
-
-  compile:
-    name: "Compile: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
-    needs: matrix
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: lbajsarowicz/github-action-magento-extension/compile@v0
-        with:
-          magento-version: ${{ matrix.magento }}
-          php-version: ${{ matrix.php }}
-
-  unit:
-    name: "Unit tests: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
-    needs: matrix
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
-        with:
-          magento-version: ${{ matrix.magento }}
-          php-version: ${{ matrix.php }}
-          suite: unit
-```
-
-`phpcs` and `phpstan` jobs have the same shape with `annotations: ${{ strategy.job-index == 0 }}` added. An integration job adds two service containers, whose versions also come from the matrix:
-
-```yaml
-  integration:
-    name: "Integration tests: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
-    needs: matrix
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
-    services:
-      mariadb:
-        image: mariadb:${{ matrix.mariadb }}
-        env:
-          MARIADB_ROOT_PASSWORD: magento
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
-          --health-interval 10s --health-timeout 5s --health-retries 12
-      opensearch:
-        image: opensearchproject/opensearch:${{ matrix.opensearch }}
-        env:
-          discovery.type: single-node
-          DISABLE_SECURITY_PLUGIN: 'true'
-          DISABLE_INSTALL_DEMO_CONFIG: 'true'
-          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
-        ports:
-          - 9200:9200
-        options: >-
-          --health-cmd "curl -fs http://localhost:9200/_cluster/health"
-          --health-interval 10s --health-timeout 5s --health-retries 30
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
-        with:
-          magento-version: ${{ matrix.magento }}
-          php-version: ${{ matrix.php }}
-          suite: integration
-          db-password: magento
-```
-
-## One job per version combination
-
-The sub-actions can also be steps of one job. The pull request then shows one row per Magento and PHP combination, and a `Result` row with a table of every check.
-
-- Magento is installed once per job. Each later step reuses the install, PHP and the Composer cache of the steps before it.
-- A step that fails names the check that failed. The steps that depend on it are skipped: nothing runs after a failed install, unit tests and PHPStan need a successful compilation, integration tests need passing unit tests.
-- `report` reads the results of all jobs and writes one table to the run summary. Make `Result` the required check in branch protection.
-
-```yaml
-jobs:
-  matrix:
-    # as in Usage above
 
   check:
     name: "Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
@@ -195,7 +82,7 @@ jobs:
       MAGENTO_EXTENSION_CHECK_SUMMARY: 'false'
     services:
       mariadb:
-        image: mariadb:${{ matrix.mariadb }}
+        image: mariadb:${{ matrix.mariadb }} # zizmor: ignore[unpinned-images] the version follows the Magento release under test
         env:
           MARIADB_ROOT_PASSWORD: magento
         ports:
@@ -204,7 +91,7 @@ jobs:
           --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 10s --health-timeout 5s --health-retries 12
       opensearch:
-        image: opensearchproject/opensearch:${{ matrix.opensearch }}
+        image: opensearchproject/opensearch:${{ matrix.opensearch }} # zizmor: ignore[unpinned-images] the version follows the Magento release under test
         env:
           discovery.type: single-node
           DISABLE_SECURITY_PLUGIN: 'true'
@@ -218,6 +105,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+          coverage: none
+          tools: composer:v2
 
       - name: Composer and syntax
         id: static
@@ -313,7 +208,10 @@ jobs:
           [[ ! "$RESULTS" =~ (failure|cancelled|skipped) ]]
 ```
 
-`MAGENTO_EXTENSION_CHECK_SUMMARY: 'false'` turns off the per-step summaries, so the table of the `Result` job is the only one.
+- Magento is installed once per job. Each later step reuses the install and the Composer cache of the steps before it.
+- A step that fails names the check that failed. The steps that depend on it are skipped: nothing runs after a failed install, unit tests and PHPStan need a successful compilation, integration tests need passing unit tests.
+- `report` reads the results of all jobs and writes one table to the run summary. Make `Result` the required check in branch protection.
+- `MAGENTO_EXTENSION_CHECK_SUMMARY: 'false'` turns off the per-step summaries, so the table of the `Result` job is the only one.
 
 | Mark | Meaning |
 |---|---|
@@ -324,6 +222,110 @@ jobs:
 | ⚪ | not run because an earlier check failed |
 | ❔ | the job uploaded no result |
 
+## Setting up PHP
+
+The actions do not install PHP. The job provides it, which lets the same actions run on a plain runner and inside a container image of your choice. They need on the `PATH`:
+
+| Tool | Notes |
+|---|---|
+| PHP | The version of the matrix cell, with the extensions Magento requires |
+| Composer 2 | |
+| Node.js 20 or newer | Runs the actions themselves; present on GitHub-hosted runners and in the Warden images |
+| `git`, `unzip` | For Composer |
+| `mysql` client | Optional; used by integration tests to prepare the database |
+
+`php-version` is a safeguard, not a setup instruction: the action fails when the PHP of the job is another version, and without the input it accepts whatever PHP is there.
+
+### On a GitHub-hosted runner
+
+A step before the first action, as in the workflow above:
+
+```yaml
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+          coverage: none
+          tools: composer:v2
+```
+
+### In a container image: Warden
+
+The [Warden](https://warden.dev) images `wardenenv/php-fpm:<php>-magento2` carry PHP with Magento's extensions, Composer, Node.js, `git` and the MySQL client. The job runs in the image, and the PHP version of the matrix picks the tag. Three things differ from the workflow above:
+
+```yaml
+  check:
+    name: "Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
+    needs: matrix
+    runs-on: ubuntu-24.04
+    container:
+      image: wardenenv/php-fpm:${{ matrix.php }}-magento2
+      options: --user root
+    # strategy, env and services as above
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # In place of the "Set up PHP" step. A job container starts without the entrypoint of the
+      # image, which is what selects Composer 2.
+      - name: Select Composer 2
+        run: cp /usr/bin/composer2 /usr/bin/composer
+
+      # ... the same steps ...
+
+      - name: Integration tests
+        id: integration
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' }}
+        uses: lbajsarowicz/github-action-magento-extension/phpunit@v0
+        with:
+          magento-version: ${{ matrix.magento }}
+          php-version: ${{ matrix.php }}
+          suite: integration
+          db-password: magento
+          db-host: mariadb
+          search-host: opensearch
+```
+
+1. `container:` with `--user root`, because GitHub writes the workspace and its own files as root.
+2. `Select Composer 2` in place of `Set up PHP`.
+3. Services are reached by their name (`mariadb`, `opensearch`), not through `127.0.0.1`.
+
+Any other image works the same way, as long as it has the tools in the table. On a self-hosted runner a container image is the better choice, because nothing is installed on the host.
+
+## One job per check
+
+Every sub-action can also be its own job, which gives one row per check and combination, such as `Compile: Magento 2.4.9 @ PHP 8.5`. Each job then sets up PHP and installs Magento itself.
+
+```yaml
+  compile:
+    name: "Compile: Magento ${{ matrix.magento }} @ PHP ${{ matrix.php }}"
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+          coverage: none
+          tools: composer:v2
+      - uses: lbajsarowicz/github-action-magento-extension/compile@v0
+        with:
+          magento-version: ${{ matrix.magento }}
+          php-version: ${{ matrix.php }}
+```
+
 ## Inputs
 
 These are the inputs of the root action. Each sub-action takes the subset that applies to it, with shorter names where there is no ambiguity (`config`, `severity`, `scope`, `level`, `baseline`); see its `action.yml`.
@@ -332,7 +334,7 @@ The static action takes `php-version`, `checks`, `path`, `phpcs-config`, `phpcs-
 
 | Input | Default | Meaning |
 |---|---|---|
-| `php-version` | required | PHP minor, such as `8.4` |
+| `php-version` | empty | PHP minor the job is expected to provide, such as `8.4`; see Setting up PHP |
 | `magento-version` | empty | Exact release, such as `2.4.8-p5`; empty runs static checks only |
 | `checks` | `default` | Comma-separated list; `default` is every check the inputs allow |
 | `path` | `.` | Directory with the extension's `composer.json` |
@@ -429,10 +431,6 @@ annotations: ${{ strategy.job-index == 0 }}
 | `status` | `passed` or `failed` |
 | `result-path` | Directory with `results.json` and one log per check |
 
-## Requirements
-
-A Linux runner with Node.js 20 or newer on the `PATH`, `rsync` and `diff`. GitHub-hosted runners have all three. The actions set up PHP and Composer themselves. The code of the actions is plain Node.js without npm dependencies, covered by `npm test`.
-
 ## Permissions
 
 `contents: read` for the checkout. In a private repository add `pull-requests: read` so the action can list the changed files; without it PHPCS checks every file.
@@ -443,7 +441,7 @@ A Linux runner with Node.js 20 or newer on the `PATH`, `rsync` and `diff`. GitHu
 - The release's own development dependencies are installed together with the extension, in one dependency graph.
 - Composer's block on packages with published advisories is switched off inside the temporary Magento project, because older release lines would not resolve otherwise.
 - The extension's own `phpunit.xml`, `require-dev` and `autoload-dev` are not honoured yet.
-- Every job installs Magento again, which costs 30 to 45 seconds per job.
+- Each job installs Magento once, which costs 30 to 45 seconds.
 - No pull-request comment.
 
 ## Releases

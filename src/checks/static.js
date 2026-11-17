@@ -96,7 +96,7 @@ async function phpcs(ctx) {
   ctx.log(`${versions} (${toolsLabel})`);
 
   const report = path.join(config.results, 'phpcs.json');
-  await ctx.sh.exec(binary, [`--standard=${standard}`, '-s', `--file-list=${list}`, '--report-full', `--report-json=${report}`],
+  await ctx.sh.exec(binary, ['-d', 'memory_limit=-1', `--standard=${standard}`, '-s', `--file-list=${list}`, '--report-full', `--report-json=${report}`],
     { cwd: config.extension, allowFailure: true });
   let parsed = null;
   try {

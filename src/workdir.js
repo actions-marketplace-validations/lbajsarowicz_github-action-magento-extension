@@ -43,27 +43,18 @@ function writeInstallState(config, status) {
 }
 
 /**
- * Tells a sub-action whether an earlier step of the same job already set up PHP and restored the
- * Composer cache, and records what this step is about to set up.
+ * Tells a sub-action whether an earlier step of the same job already restored the Composer cache,
+ * and records what this step is about to restore.
  */
-function detectPrepared({ work, job, phpVersion, profile, cacheId }) {
+function detectPrepared({ work, job, cacheId }) {
   fs.mkdirSync(work, { recursive: true });
-  const phpFile = path.join(work, 'prepared-php');
   const cacheFile = path.join(work, 'prepared-cache');
-  const phpWanted = `${job} php${phpVersion} ${profile}`;
-  // The Magento profile installs a superset of the PHP extensions of the static profile.
-  const phpSuperset = `${job} php${phpVersion} magento`;
   const cacheWanted = `${job} ${cacheId}`;
-
-  const php = [phpWanted, phpSuperset].includes(read(phpFile));
-  if (!php) {
-    fs.writeFileSync(phpFile, phpWanted);
-  }
   const cache = read(cacheFile) === cacheWanted;
   if (!cache) {
     fs.writeFileSync(cacheFile, cacheWanted);
   }
-  return { php, cache };
+  return { cache };
 }
 
 module.exports = { prepareWorkDirectory, readInstallState, writeInstallState, detectPrepared };

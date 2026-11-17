@@ -43,13 +43,12 @@ test('another job, another PHP version or another release starts clean', () => {
   }
 });
 
-test('PHP and the Composer cache are set up once per job', () => {
+test('the Composer cache is restored once per job and release', () => {
   const { env } = workspace();
-  const base = { work: env.MEC_WORK_DIR, job: '1-1-check', phpVersion: '8.4' };
-  assert.deepEqual(detectPrepared({ ...base, profile: 'static', cacheId: 'static' }), { php: false, cache: false });
-  assert.deepEqual(detectPrepared({ ...base, profile: 'static', cacheId: 'static' }), { php: true, cache: true });
-  assert.deepEqual(detectPrepared({ ...base, profile: 'magento', cacheId: 'magento2.4.9' }), { php: false, cache: false });
-  assert.deepEqual(detectPrepared({ ...base, profile: 'magento', cacheId: 'magento2.4.9' }), { php: true, cache: true });
-  assert.deepEqual(detectPrepared({ ...base, profile: 'static', cacheId: 'magento2.4.9' }), { php: true, cache: true });
-  assert.deepEqual(detectPrepared({ ...base, job: '2-1-check', profile: 'magento', cacheId: 'magento2.4.9' }), { php: false, cache: false });
+  const base = { work: env.MEC_WORK_DIR, job: '1-1-check' };
+  assert.deepEqual(detectPrepared({ ...base, cacheId: 'static' }), { cache: false });
+  assert.deepEqual(detectPrepared({ ...base, cacheId: 'static' }), { cache: true });
+  assert.deepEqual(detectPrepared({ ...base, cacheId: 'magento2.4.9' }), { cache: false });
+  assert.deepEqual(detectPrepared({ ...base, cacheId: 'magento2.4.9' }), { cache: true });
+  assert.deepEqual(detectPrepared({ ...base, job: '2-1-check', cacheId: 'magento2.4.9' }), { cache: false });
 });

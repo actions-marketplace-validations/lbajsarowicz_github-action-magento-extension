@@ -45,11 +45,15 @@ function requireMatch(value, pattern, message) {
 /**
  * Reads and validates the inputs the action passes as MEC_* environment variables.
  */
-function readConfig(env) {
+function readConfig(env, { phpRuntime = '' } = {}) {
   const value = (name, fallback = '') => (env[name] === undefined || env[name] === '' ? fallback : String(env[name]));
 
-  const phpVersion = requireMatch(value('MEC_PHP_VERSION'), /^[0-9]+\.[0-9]+$/,
+  const installedMinor = (/^[0-9]+\.[0-9]+/.exec(phpRuntime) || [''])[0];
+  const phpVersion = requireMatch(value('MEC_PHP_VERSION', installedMinor), /^[0-9]+\.[0-9]+$/,
     `php-version must be a minor such as 8.4, got '${value('MEC_PHP_VERSION')}'.`);
+  if (installedMinor && installedMinor !== phpVersion) {
+    throw new ConfigError(`php-version is ${phpVersion}, but the job has PHP ${phpRuntime}. Set up PHP ${phpVersion} before this action; see "Setting up PHP" in the README.`);
+  }
   const magentoVersion = requireMatch(value('MEC_MAGENTO_VERSION'), /^([0-9]+\.[0-9]+\.[0-9]+(-p[0-9]+)?)?$/,
     `magento-version must be a release such as 2.4.8-p5, got '${value('MEC_MAGENTO_VERSION')}'.`);
 

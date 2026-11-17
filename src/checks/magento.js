@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { CheckFailed } = require('../errors');
 const { withExtension, templateRepositoryUrl } = require('../project');
+const { mirrorDirectory, differences } = require('../copy');
 
 const HELPERS = path.join(__dirname, '..', 'php');
 
@@ -34,10 +35,10 @@ async function install(ctx) {
   }
   // Composer leaves out what .gitattributes marks export-ignore, which usually includes the tests.
   // The checks are about the checkout, so the copy is completed from it.
-  await ctx.sh.exec('rsync', ['-a', '--delete', '--exclude=.git', '--exclude=/vendor', `${extension}/`, `${installed}/`]);
-  const differences = await ctx.sh.exec('diff', ['-rq', '--exclude=.git', '--exclude=vendor', extension, installed], { echo: false, allowFailure: true });
-  if (differences.output.trim() !== '') {
-    ctx.log(differences.output.trim().split('\n').slice(0, 5).join('\n'));
+  mirrorDirectory(extension, installed);
+  const different = differences(extension, installed);
+  if (different.length > 0) {
+    ctx.log(different.join('\n'));
     throw new CheckFailed(`the installed ${extensionName} is not identical to the checkout`);
   }
 
