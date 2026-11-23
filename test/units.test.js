@@ -16,6 +16,7 @@ const { unitConfiguration, runPhpunit } = require('../src/checks/phpunit');
 const { CheckFailed } = require('../src/errors');
 const { defaultConfiguration } = require('../src/checks/phpstan');
 const { resolveToolConfig } = require('../src/checks/tool-config');
+const { validate } = require('../src/checks/static');
 const { workspace } = require('./helpers');
 
 test('modules, PHP files and test directories of an extension', () => {
@@ -278,4 +279,22 @@ test('PHPUnit without tests is a warning, without a report a failure', async () 
   assert.equal(ran.status, 'passed');
 
   await assert.rejects(runPhpunit(ctx(null, 255), 'unit', [], root), (error) => error instanceof CheckFailed && /did not finish \(exit code 255\)/.test(error.note));
+});
+
+test('validate requires a module only from a magento2-module package', async () => {
+  const run = (composer) => {
+    const { extension } = workspace({ 'composer.json': JSON.stringify(composer), 'registration.php': null, 'etc/module.xml': null });
+    const ctx = {
+      config: { extension, extensionName: composer.name },
+      modules: moduleNames(extension),
+      sh: { exec: async () => ({ code: 0, stdout: '', output: '' }) },
+    };
+    return validate(ctx);
+  };
+  await assert.rejects(run({ name: 'acme/module-demo', type: 'magento2-module' }),
+    (error) => error instanceof CheckFailed && /no etc\/module.xml/.test(error.note));
+  const library = await run({ name: 'acme/demo-commands', type: 'magento2-library' });
+  assert.equal(library.status, 'passed');
+  assert.equal(library.note, 'acme/demo-commands is a magento2-library package and declares no module');
+  assert.match((await run({ name: 'acme/plain' })).note, /is a library package/);
 });
