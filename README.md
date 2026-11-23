@@ -50,7 +50,7 @@ For every supported release and PHP version at once, with one result table per p
 
 | Check | What it does | Needs Magento |
 |---|---|---|
-| `validate` | `composer validate`; `registration.php` and `etc/module.xml` agree on the module name | no |
+| `validate` | `composer validate`; `registration.php` and `etc/module.xml` agree on the module name. A package whose Composer type is not `magento2-module` may declare no module, for example one that registers console commands through an autoloaded file | no |
 | `lint` | PHP syntax of every `.php` and `.phtml` file | no |
 | `phpcs` | PHPCS on the PHP files changed by the pull request or push, with the repository's ruleset or the official Magento 2 coding standard | no |
 | `install` | Installs the release from the Mage-OS mirror with your checkout as a Composer path package, then proves the installed and registered module is an exact copy of the checkout | yes |

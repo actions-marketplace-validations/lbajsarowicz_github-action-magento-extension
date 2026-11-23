@@ -12,7 +12,11 @@ async function validate(ctx) {
   const { extension, extensionName } = ctx.config;
   await ctx.sh.exec('composer', ['validate', '--no-check-lock', `--working-dir=${extension}`]);
   if (ctx.modules.length === 0) {
-    throw new CheckFailed('no etc/module.xml declaring a module was found');
+    const type = readComposer(extension).type || 'library';
+    if (type === 'magento2-module') {
+      throw new CheckFailed('no etc/module.xml declaring a module was found');
+    }
+    return { status: 'passed', note: `${extensionName} is a ${type} package and declares no module` };
   }
   const missing = unregisteredModules(extension, ctx.modules);
   if (missing.length > 0) {
