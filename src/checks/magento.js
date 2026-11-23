@@ -86,7 +86,7 @@ async function compile(ctx) {
     }
   }
   await magento(ctx, ['setup:di:compile']);
-  return { status: 'passed', note: `no database; enabled: ${ctx.modules.join(' ')}` };
+  return { status: 'passed', note: ctx.modules.length > 0 ? `no database; enabled: ${ctx.modules.join(' ')}` : 'no database' };
 }
 
 async function staticContent(ctx) {
